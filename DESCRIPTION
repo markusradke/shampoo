@@ -1,0 +1,62 @@
+Package: GenreDiscourseAnalysis
+Title: The GenreDiscourseAnalysis repository provides the necessary functions to analyze and visualize genre discourse
+Version: 0.0.0.9000
+Authors@R: 
+    person("Markus", "Radke", , "markus.radke@tu-berlin.de", role = c("aut", "cre"),
+           comment = c(ORCID = "0009-0001-1719-7060"))
+Description: The question of the "correct" genre classification of popular music can lead to heated discussions among music fans, music journalists, and musicologists. Nevertheless, empirical studies of music preferences based on self-reported information often assume a uniform understanding among all respondents. In music psychology and music sociology, this assumption often leads to discussions about validity, replication problems, and the inability to compare studies. However, cultural studies research on popular music emphasizes the context- and perspective-dependent attribution of genres as a central phenomenon of everyday and historical discourse on popular music. So why not make a virtue out of necessity? Using genre classifications from different online music communities for 231,370 popular music titles listened to in Germany in recent decades, we present a method for creating a hierarchical genre family tree based on network analysis.
+License: CC BY 4.0
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.3
+Suggests: 
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3
+Imports: 
+    arrow,
+    bonsai,
+    broom,
+    butcher,
+    caret,
+    covr,
+    DescTools,
+    digest,
+    discrim,
+    doParallel,
+    dplyr,
+    earth,
+    flextable,
+    forcats,
+    furrr,
+    future,
+    ggplot2,
+    ggrepel,
+    ggtext,
+    glmnet,
+    hardhat,
+    htmlwidgets,
+    igraph,
+    kableExtra,
+    klaR,
+    lobstr,
+    missForestPredict,
+    mltools,
+    officer,
+    parsnip,
+    quarto,
+    r2d3,
+    recipes,
+    rgexf,
+    rlang,
+    scales,
+    stats,
+    stringr,
+    themis,
+    tidyr,
+    tune,
+    utils,
+    webshot2,
+    workflows,
+    yardstick
+Depends: 
+    R (>= 3.5)
