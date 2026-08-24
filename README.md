@@ -11,7 +11,6 @@
   <img alt="License: CC BY 4.0" src="https://img.shields.io/badge/License-CC%20BY%204.0-brightgreen" />
   <img alt="Python 3.11" src="https://img.shields.io/badge/Python-3.11-blue" />
   <img alt="R scripts included" src="https://img.shields.io/badge/R-Scripts-blueviolet" />
-   <img alt="ISMIR 2026" src="https://img.shields.io/badge/ISMIR-2026-orange" />
     [![R-CMD-check](https://github.com/markusradke/GenreDiscourseAnalysis/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/markusradke/GenreDiscourseAnalysis/actions/workflows/R-CMD-check.yaml)
 </p>
 
