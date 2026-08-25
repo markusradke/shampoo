@@ -5,8 +5,8 @@ library(dplyr)
 library(yardstick)
 # Assumes that the virtual environment " ".venv"has been created in the project folder and the required packages have been installed
 Sys.setenv(
-  RETICULATE_PYTHON = ".venv/Scripts/python.exe" # local
-  # RETICULATE_PYTHON = ".venv/bin/python3" # Hendrix
+  RETICULATE_PYTHON = ".venv/Scripts/python.exe" # Windows
+  # RETICULATE_PYTHON = ".venv/bin/python3" # Linux
 )
 library(reticulate)
 optuna <- import("optuna")

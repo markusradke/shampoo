@@ -65,4 +65,4 @@ readr::write_csv(
   "data/modeled_features/spotify_genres_mapping_holdout.csv"
 )
 # LYRICS FEATURES ----
-# To get the lyrics features, please follow the helpers/RQ5/lyrics_ananlysis flow by running the scripts in order. The final output will be two csv files, one for train and one for holdout, which can be found in data/modeled_features/lyrics/.
+# To get the lyrics features, please follow the helpers/RQ5/lyrics_ananlysis flow by running the scripts in order. The final output will be two csv files, one for train and one for holdout, which can be found in data/modeled_features/lyrics/. or use the features provided in the data repository (https://doi.org/10.14279/depositonce-26469).
