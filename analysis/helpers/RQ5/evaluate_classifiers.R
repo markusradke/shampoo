@@ -12,18 +12,11 @@ evaluate_final_model_on_holdout <- function(K, folds, holdout) {
     y_holdout_hot,
     mode = "final"
   )
-  saveRDS(
-    holdout_evaluation,
-    sprintf("models/classification/holdout_evaluation_lgbm_k%d.rds", K)
-  )
   print(holdout_evaluation$metrics)
   plot <- plot_confusion_matrix(holdout_evaluation)
-  ggplot2::ggsave(
-    sprintf("models/classification/holdout_confusion_matrix_lgbm_k%d.png", K),
-    plot = plot,
-    width = ifelse(K > 20, 12, 8),
-    height = ifelse(K > 20, 10, 6),
-    dpi = 600
+  list(
+    holdout_evaluation = holdout_evaluation,
+    holdout_confusion_matrix_plot = plot
   )
 }
 

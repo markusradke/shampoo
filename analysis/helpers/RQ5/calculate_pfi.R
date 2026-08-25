@@ -11,23 +11,23 @@ evaluate_and_save_grouped_pfi_for_all_k_models <- function(
   n_rep,
   random_state
 ) {
-  # lgbm_importance <- get_holdout_permutation_feature_importance(
-  #   KS = ks,
-  #   feature_groups = feature_groups,
-  #   random_state = random_state,
-  #   n_rep = n_rep
-  # )
-  # saveRDS(
-  #   lgbm_importance,
-  #   "models/classification/holdout_permutation_feature_importance_lgbm.rds"
-  # )
-  lgbm_importance <- readRDS(
+  lgbm_importance <- get_holdout_permutation_feature_importance(
+    KS = ks,
+    feature_groups = feature_groups,
+    random_state = random_state,
+    n_rep = n_rep
+  )
+  saveRDS(
+    lgbm_importance,
     "models/classification/holdout_permutation_feature_importance_lgbm.rds"
   )
+  # lgbm_importance <- readRDS(
+  #   "models/classification/holdout_permutation_feature_importance_lgbm.rds"
+  # )
   lgbm_importance_stats <- get_pfi_statistics(lgbm_importance)
   plot_pfi(lgbm_importance_stats)
   ggsave(
-    "models/classification/holdout_permutation_feature_importance_lgbm.png",
+    "reports/figures/fig13_pfi.png",
     width = 10,
     height = 8,
     dpi = 600

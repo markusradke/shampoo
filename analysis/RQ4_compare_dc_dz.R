@@ -51,7 +51,7 @@ res_dz <- run_dz_compare(
   load_states_if_exists = FALSE
 )
 ggsave(
-  "reports/figures/appendix/figC1_DZ_contingency.png",
+  "reports/figures/fig09_DZ_contingency.png",
   plot = res_dz$plot,
   width = 12,
   height = 10,

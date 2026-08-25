@@ -76,15 +76,15 @@ for (k in CHOSEN_Ks) {
   message(sprintf("Inspecting flows for k = %d", k))
   trackmap <- get_track_category_probabilities(P, cat_states, k)
   ids <- add_track_map_to_long(mb, trackmap) |> distinct(track.s.id, cat)
-  # flows_cutoff <- get_flow_summary(mb, ids, perc_threshold = 1)
-  # readr::write_csv(
-  #   flows_cutoff$flows,
-  #   sprintf("models/dag/flows_k%d.csv", k)
-  # )
-  # flextable::flextable(flows_cutoff$flows) |>
-  #   flextable::save_as_docx(
-  #     path = sprintf("reports/figures/flows_k%d.docx", k)
-  #   )
+  flows_cutoff <- get_flow_summary(mb, ids, perc_threshold = 1)
+  readr::write_csv(
+    flows_cutoff$flows,
+    sprintf("models/dag/flows_k%d.csv", k)
+  )
+  flextable::flextable(flows_cutoff$flows) |>
+    flextable::save_as_docx(
+      path = sprintf("reports/figures/flows_k%d.docx", k)
+    )
 
   # calcualte differentiation and boundary strength
   flows_full <- get_flow_summary(mb, ids, perc_threshold = 0)

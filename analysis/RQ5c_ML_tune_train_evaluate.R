@@ -26,18 +26,41 @@ CATEGORICAL_COLUMNS <- readr::read_csv(
 )$column
 
 # TUNING, TRAINING, EVALUATION (METRICS + PFI) ----
-# for (K in KS) {
-#   message(sprintf("Loading folds and holdout data for K=%d", K))
-#   folds <- readRDS(sprintf("data/classification_ready_data/folds_k%d.rds", K))
-#   N_FOLDS <- length(folds$X_train)
-#   holdout <- readRDS(sprintf(
-#     "data/classification_ready_data/holdout_k%d.rds",
-#     K
-#   ))
-#   tune_and_save_lgbm_model(K, folds, n_trials = N_TRIALS) # will skip if already exists
-#   retrain_and_save_best_parameters_lgbm_model(K, folds) # will skip if already exists
-#   evaluate_final_model_on_holdout(K, folds, holdout)
-# }
+for (K in KS) {
+  message(sprintf("Loading folds and holdout data for K=%d", K))
+  folds <- readRDS(sprintf("data/classification_ready_data/folds_k%d.rds", K))
+  N_FOLDS <- length(folds$X_train)
+  holdout <- readRDS(sprintf(
+    "data/classification_ready_data/holdout_k%d.rds",
+    K
+  ))
+  tune_and_save_lgbm_model(K, folds, n_trials = N_TRIALS) # will skip if already exists
+  retrain_and_save_best_parameters_lgbm_model(K, folds) # will skip if already exists
+  evaluation <- evaluate_final_model_on_holdout(K, folds, holdout)
+  saveRDS(
+    evaluation$holdout_evaluation,
+    sprintf("models/classification/holdout_evaluation_lgbm_k%d.rds", K)
+  )
+
+  figure_number_lookup <- c(
+    "5" = "fig10",
+    "15" = "fig11",
+    "31" = "fig12"
+  )
+  plot_path <- sprintf(
+    "reports/figures/%s_cm_lgbm_k%d.png",
+    figure_number_lookup[as.character(K)],
+    K
+  )
+
+  ggplot2::ggsave(
+    plot_path,
+    plot = evaluation$holdout_confusion_matrix_plot,
+    width = ifelse(K > 20, 12, 8),
+    height = ifelse(K > 20, 10, 6),
+    dpi = 600
+  )
+}
 
 evaluate_and_save_grouped_pfi_for_all_k_models(
   ks = KS,
