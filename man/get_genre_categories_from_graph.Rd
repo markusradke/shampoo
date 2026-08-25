@@ -16,10 +16,10 @@ get_genre_categories_from_graph(
 \item{dag}{A list containing:
 \itemize{
 \item graph: An igraph object representing the directed acyclic graph of genre tags.
-\item generality: A named vector of generality scores for each genre tag, where higher values indicate more general tags. Generality is calculated based on the weighted number of indegrees in the DAG, reflecting how many other tags act as subgenres for a given tag.
+\item generality: A named vector of generality scores for each genre tag, where higher values indicate more general tags. Generality is calculated based on the weighted number of indegrees in the DAG, reflecting how many other tags act as subgenres for a given tag. To obtain this list, use the \link{get_tag_dag_from_normalized_votes} function with the appropriate parameters.
 }}
 
-\item{P}{A normalized wide vote matrix where rows correspond to tracks and columns correspond to genre tags. Each entry represents the normalized vote count for a tag for a given track.}
+\item{P}{A normalized wide vote matrix where rows correspond to tracks and columns correspond to genre tags. Each entry represents the normalized vote count for a tag for a given track. To obtain this matrix, use the \link{get_normalized_wide_vote_matrix} function with the appropriate parameters.}
 
 \item{lambda}{A numeric value between 0 and 1 specifying the weight given to the generality of a genre tag when determining the order of processing. A higher value gives more weight to generality, while a lower value gives more weight to size. The default value is 0.5, which gives equal weight to both generality and size.}
 
@@ -44,4 +44,7 @@ Get genre categories from a directed acyclic graph (DAG) of genre tags based on 
 }
 \details{
 The function processes the genre tags in the specified order (or based on sizes if no order is provided) and iteratively folds the DAG by merging subgenres into their supergenres. The resulting mappings, weights, and sizes are stored at each step of the process, allowing for analysis of the genre category structure at different levels of granularity. Mapping matrices are initialized as identity matrices, and weights are normalized to ensure that all out edges from a node sum to 1. Mapping is done by iteratively (1) updating the mapping matrix based on the weights of the edges in the DAG, (2) updating the weight matrix based on the updated mapping, and (3) calculating the sizes of the genre categories based on the updated mapping. The process continues until all genre tags have been processed, resulting in a final mapping of genre tags to genre categories. If you are interested in a specific set of genre tags, place it last in the processing order, and the function will return the mapping for that set of genre tags. The processing order of other genre tags before that does not matter for the final mapping of the specific set of genre tags, but it may affect the intermediate mappings and sizes of the genre categories.
+}
+\seealso{
+\link{get_normalized_wide_vote_matrix} and \link{get_tag_dag_from_normalized_votes} for obtaining the required input parameters.
 }

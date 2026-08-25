@@ -7,9 +7,9 @@
 get_track_category_probabilities(P, res_list, chosen_k)
 }
 \arguments{
-\item{P}{A normalized wide vote matrix where rows correspond to tracks and columns correspond to genre tags. Each entry represents the normalized vote count for a tag for a given track. Rows sum to 1, representing the distribution of votes across tags for each track.}
+\item{P}{A normalized wide vote matrix where rows correspond to tracks and columns correspond to genre tags. Each entry represents the normalized vote count for a tag for a given track. Rows sum to 1, representing the distribution of votes across tags for each track. To obtain this matrix, use the \link{get_normalized_wide_vote_matrix} function with the appropriate parameters.}
 
-\item{res_list}{A list containing the results of the genre category extraction process, including mappings, weights, sizes, and processing order.}
+\item{res_list}{A list containing the results of the genre category extraction process, including mappings, weights, sizes, and processing order. To obtain this list, use the \link{get_genre_categories_from_graph} function with the appropriate parameters.}
 
 \item{chosen_k}{An integer specifying the number of genre categories to consider in the final mapping. The function will use the final mapping corresponding to the chosen_k value to calculate the probabilities of each track belonging to each genre category.}
 }
@@ -18,4 +18,7 @@ A data frame containing the probabilities of each track belonging to each genre 
 }
 \description{
 Get the probabilities of each track belonging to each genre category based on the final mapping from the genre category extraction process.
+}
+\seealso{
+\link{get_normalized_wide_vote_matrix} and \link{get_genre_categories_from_graph} for obtaining the required input parameters.
 }
