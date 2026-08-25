@@ -135,6 +135,7 @@ After that please install all the necessary packages contained in `requirements.
 ```
 pip install -r requirements.txt
 ```
+In the `analysis/RQ5c_ML_tune_train_evaluate.R` script, please choose to comment out line 8 or 9 according to your operating system.
 
 Finally, please copy the necessary data from the DepositOnce repository to the repective folders (see [Data Availability](#data-availability) for details).
 
