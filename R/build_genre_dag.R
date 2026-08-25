@@ -45,7 +45,9 @@ get_tag_dag_from_normalized_votes <- function(P) {
 
   message(sprintf(
     "Tags with top 20 generality (descending order):\n%s",
-    toString(names(indegree_weights |> sort(decreasing = TRUE) |> head(20)))
+    toString(names(
+      indegree_weights |> sort(decreasing = TRUE) |> utils::head(20)
+    ))
   ))
 
   # Build DAG
@@ -54,8 +56,8 @@ get_tag_dag_from_normalized_votes <- function(P) {
     from = colnames(P)[edges[, 1]],
     to = colnames(P)[edges[, 2]],
     weight = weights[edges]
-  ) |>
-    filter(weight > 0) # only keep edges with non-zero weight
+  )
+  E <- E[E$weight > 0, ]
 
   g <- igraph::graph_from_data_frame(E, directed = TRUE)
   # add all nodes to the graph, even if they have no edges
@@ -110,7 +112,7 @@ get_genre_categories_from_graph <- function(
 
   tiebreak_oder <- get_tag_name_ranks_for_size_tiebreaking(P)
   G <- ncol(P) - length(dangling) # number of genres to process
-  P <- as(P, "sparseMatrix")
+  P <- methods::as(P, "sparseMatrix")
   weights <- t(igraph::as_adjacency_matrix(g, attr = "weight", sparse = FALSE))
   weights <- weights[colnames(P), colnames(P)] # reorder weights to match P
 
@@ -258,7 +260,7 @@ calculate_sizes_from_track_mapping <- function(track_mapping, tiebreak_order) {
   winners_names <- colnames(track_mapping)[winners]
   sizes <- table(winners_names)
   missing <- setdiff(colnames(track_mapping), names(sizes))
-  missing <- setNames(rep(0, length(missing)), missing)
+  missing <- stats::setNames(rep(0, length(missing)), missing)
   sizes <- c(sizes, missing)
   sizes <- sizes[colnames(track_mapping)]
   message("Done.")
@@ -287,7 +289,7 @@ get_track_category_probabilities <- function(
     prob_track_map[most_relevant_genre] <- 1
     return(prob_track_map)
   }
-  P <- as(P, "sparseMatrix")
+  P <- methods::as(P, "sparseMatrix")
   tiebreak_order <- get_tag_name_ranks_for_size_tiebreaking(P)
   G <- nrow(res_list$mappings[[1]])
   final_mapping <- res_list$mappings[[G - chosen_k + 1]]
@@ -334,7 +336,8 @@ add_track_map_to_long <- function(long_df, track_map) {
     fill = 0
   )
   mapping <- cbind(track.s.id = wide$track.s.id, track_map)
-  dplyr::left_join(long_df, mapping, by = "track.s.id")
+  long_df <- merge(long_df, mapping, by = "track.s.id", all.x = TRUE)
+  long_df
 }
 
 get_tag_name_ranks_for_size_tiebreaking <- function(P) {

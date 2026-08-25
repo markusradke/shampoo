@@ -7,6 +7,6 @@
 # * https://testthat.r-lib.org/articles/special-files.html
 
 library(testthat)
-library(GenreDiscourseAnalysis)
+library(shampoo)
 
-test_check("GenreDiscourseAnalysis")
+test_check("shampoo")
