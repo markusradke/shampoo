@@ -4,6 +4,7 @@ gc()
 library(ggplot2)
 source("analysis/helpers/helpers_prepare_corpora.R")
 
+
 # USER SETTINGS ----
 MIN_VOTES <- 2
 MIN_ARTIST_PREV_MODEL <- 0.0005
@@ -34,6 +35,30 @@ saveRDS(DZ_NON_MUSIC_TAGS, "data/long_data/dz_non_music_tags.rds")
 S_NON_MUSIC_TAGS <- c("talent show")
 saveRDS(S_NON_MUSIC_TAGS, "data/long_data/s_non_music_tags.rds")
 
+
+# CREATE ALL NECESSARY FOLDERS ----
+file_paths <- c(
+  "data/long_data",
+  "data/splits",
+  "data/classification_ready_data",
+  "data/modeled_features/",
+  "data/modeled_features/lyrics/",
+  "data/normalized_voting_matrices/",
+  "data/splits/",
+  "models/dag",
+  "models/dag/robustness_checkpoints/",
+  "models/classification",
+  "models/classification/tuning/",
+  "models/lyrics/",
+  "reports/figures"
+)
+
+# if folders do not exist, create them
+for (path in file_paths) {
+  if (!dir.exists(path)) {
+    dir.create(path, recursive = TRUE)
+  }
+}
 
 # PREPARE CORPORA ----
 poptrag_selected <- prepare_poptrag_selected("data-raw/poptrag.rds")
