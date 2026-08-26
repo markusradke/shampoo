@@ -14,10 +14,10 @@ Suggests:
 Config/testthat/edition: 3
 Imports: 
     data.table, 
-    methods,
     utils,
     stats,
     igraph, 
+    Matrix,
     DescTools
 Depends: 
     R (>= 4.1.0)

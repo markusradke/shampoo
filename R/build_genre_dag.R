@@ -1,13 +1,13 @@
-get_normalized_wide_vote_matrix <- function(long_df) {
+get_normalized_wide_vote_matrix <- function(long_dt) {
   #' Get normalized wide vote matrix from long genre tag data.table representing the distribution of votes for each genre tag across tracks.
   #'
-  #' @param long_df A long data.table containing columns: id, tag_name, tag_count
+  #' @param long_dt A long data.table containing columns: id, tag_name, tag_count
   #' @return A normalized wide vote matrix where rows correspond to tracks and columns correspond to genre tags. Each entry represents the normalized vote count for a tag for a given track. Rows sum to 1, representing the distribution of votes across tags for each track.
   #' @details The function takes a long data.table containing track-tag pairs and their corresponding vote counts, and converts it into a wide format where each row represents a track and each column represents a genre tag. If you have no detailed tag counts per track, we suggest you set these to one for all rows. The vote counts are then normalized for each track, so that the sum of votes across all tags for a given track equals 1. This normalized wide vote matrix can be used for further analysis, such as building a directed acyclic graph (DAG) of genre tags based on their co-occurrence and generality.
   #' @seealso \link{get_tag_dag_from_normalized_votes} for obtaining the directed acyclic graph of genre tags based on the normalized wide vote matrix.
   #' @export
   wide <- data.table::dcast(
-    long_df,
+    long_dt,
     track.s.id ~ tag_name,
     value.var = "tag_count",
     fill = 0
@@ -112,7 +112,7 @@ get_genre_categories_from_graph <- function(
 
   tiebreak_oder <- get_tag_name_ranks_for_size_tiebreaking(P)
   G <- ncol(P) - length(dangling) # number of genres to process
-  P <- methods::as(P, "sparseMatrix")
+  P <- Matrix::Matrix(P, sparse = TRUE)
   weights <- t(igraph::as_adjacency_matrix(g, attr = "weight", sparse = FALSE))
   weights <- weights[colnames(P), colnames(P)] # reorder weights to match P
 
@@ -289,7 +289,7 @@ get_track_category_probabilities <- function(
     prob_track_map[most_relevant_genre] <- 1
     return(prob_track_map)
   }
-  P <- methods::as(P, "sparseMatrix")
+  P <- Matrix::Matrix(P, sparse = TRUE)
   tiebreak_order <- get_tag_name_ranks_for_size_tiebreaking(P)
   G <- nrow(res_list$mappings[[1]])
   final_mapping <- res_list$mappings[[G - chosen_k + 1]]
@@ -321,23 +321,23 @@ get_track_category_probabilities <- function(
 }
 
 
-add_track_map_to_long <- function(long_df, track_map) {
+add_track_map_to_long <- function(long_dt, track_map) {
   #' Add mapped genre assignment probabilities to long genre tag data frame based on the most likely genre category for each track.
-  #' @param long_df A long data frame containing columns: id, tag_name, tag
+  #' @param long_dt A long data.table object containing columns: id, tag_name, tag
   #' count. Each row represents a track-tag pair, where id is the track identifier, tag_name is the genre tag name, and tag_count is the count of votes for that tag for the given track. This should be the same long data frame used to create the normalized wide vote matrix and the directed acyclic graph (DAG) of genre tags in the previous steps.
   #' @param track_map A data frame containing the probabilities of each track belonging to each genre category, as well as the most likely genre category and the corresponding probability for each track. The data frame should have columns: id, cat, cat_prob, and one column for each genre category representing the probability of that category for the given track. To obtain this data frame, use the \link{get_track_category_probabilities} function with the appropriate parameters.
-  #' @return A long data frame containing the original track-tag pairs along with the mapped genre assignment probabilities for each track. The resulting data frame will have columns: id, tag_name, tag_count, cat, cat_prob, and one column for each genre category representing the probability of that category for the given track. It will also contain all original columns from the long_df.
+  #' @return A long data frame containing the original track-tag pairs along with the mapped genre assignment probabilities for each track. The resulting data frame will have columns: id, tag_name, tag_count, cat, cat_prob, and one column for each genre category representing the probability of that category for the given track. It will also contain all original columns from the long_dt.
   #' @seealso \link{get_track_category_probabilities} for obtaining the required track mapping data frame.
   #' @export
   wide <- data.table::dcast(
-    long_df,
+    long_dt,
     track.s.id ~ tag_name,
     value.var = "tag_count",
     fill = 0
   )
   mapping <- cbind(track.s.id = wide$track.s.id, track_map)
-  long_df <- merge(long_df, mapping, by = "track.s.id", all.x = TRUE)
-  long_df
+  long_dt <- merge(long_dt, mapping, by = "track.s.id", all.x = TRUE)
+  long_dt
 }
 
 get_tag_name_ranks_for_size_tiebreaking <- function(P) {

@@ -89,6 +89,8 @@ Please refer to the function documentation for details on usage. The functions a
 4. `get_track_category_probabilities()`
 5. `add_track_map_to_long()`
 
+Please make sure you start from long tabular data with columns: `id` (unique track identifier), `tag_name` (name of a genre tag) and `tag_count` (number of votes for this tag on the track; if unknown, we suggest setting this to 1). This should be loaded into a `data.table` using the function `fread` from the package with the same name.
+
 ## Environment Setup Replication of Analysis
 >[!IMPORTANT]
 > You do not need to install the R package in order to run the replication.
@@ -107,7 +109,7 @@ Please make sure you have the following R packages installed when running the sc
 - ggplot2
 - igraph
 - lightgbm
-- methods
+- Matrix
 - readr
 - reticulate
 - rsample

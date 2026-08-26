@@ -4,16 +4,16 @@
 \alias{add_track_map_to_long}
 \title{Add mapped genre assignment probabilities to long genre tag data frame based on the most likely genre category for each track.}
 \usage{
-add_track_map_to_long(long_df, track_map)
+add_track_map_to_long(long_dt, track_map)
 }
 \arguments{
-\item{long_df}{A long data frame containing columns: id, tag_name, tag
+\item{long_dt}{A long data.table object containing columns: id, tag_name, tag
 count. Each row represents a track-tag pair, where id is the track identifier, tag_name is the genre tag name, and tag_count is the count of votes for that tag for the given track. This should be the same long data frame used to create the normalized wide vote matrix and the directed acyclic graph (DAG) of genre tags in the previous steps.}
 
 \item{track_map}{A data frame containing the probabilities of each track belonging to each genre category, as well as the most likely genre category and the corresponding probability for each track. The data frame should have columns: id, cat, cat_prob, and one column for each genre category representing the probability of that category for the given track. To obtain this data frame, use the \link{get_track_category_probabilities} function with the appropriate parameters.}
 }
 \value{
-A long data frame containing the original track-tag pairs along with the mapped genre assignment probabilities for each track. The resulting data frame will have columns: id, tag_name, tag_count, cat, cat_prob, and one column for each genre category representing the probability of that category for the given track. It will also contain all original columns from the long_df.
+A long data frame containing the original track-tag pairs along with the mapped genre assignment probabilities for each track. The resulting data frame will have columns: id, tag_name, tag_count, cat, cat_prob, and one column for each genre category representing the probability of that category for the given track. It will also contain all original columns from the long_dt.
 }
 \description{
 Add mapped genre assignment probabilities to long genre tag data frame based on the most likely genre category for each track.

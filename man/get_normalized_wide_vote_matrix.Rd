@@ -4,10 +4,10 @@
 \alias{get_normalized_wide_vote_matrix}
 \title{Get normalized wide vote matrix from long genre tag data.table representing the distribution of votes for each genre tag across tracks.}
 \usage{
-get_normalized_wide_vote_matrix(long_df)
+get_normalized_wide_vote_matrix(long_dt)
 }
 \arguments{
-\item{long_df}{A long data.table containing columns: id, tag_name, tag_count}
+\item{long_dt}{A long data.table containing columns: id, tag_name, tag_count}
 }
 \value{
 A normalized wide vote matrix where rows correspond to tracks and columns correspond to genre tags. Each entry represents the normalized vote count for a tag for a given track. Rows sum to 1, representing the distribution of votes across tags for each track.
