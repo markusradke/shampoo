@@ -9,6 +9,7 @@ Sys.setenv(
   # RETICULATE_PYTHON = ".venv/bin/python3" # Linux
 )
 library(reticulate)
+py_config()
 optuna <- import("optuna")
 
 source("analysis/helpers/RQ5/tuning_and_training.R")
