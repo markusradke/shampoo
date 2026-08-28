@@ -6,7 +6,7 @@ on:
   pull_request:
     branches: [main]
 
-name: test-coverage
+name: R-package test-coverage
 
 jobs:
   test-coverage:
@@ -75,6 +75,7 @@ jobs:
 
           # each badge contains a placeholder {{ COVERAGE }} that we replace with the actual coverage percentage
           sed -i "s/{{ COVERAGE }}/${COVERAGE}/g" badges/coverage.svg
+          sed -i "s/coverage/R-package test-coverage/g" badges/coverage.svg
         
       - name: Commit coverage badge
         if: github.ref == 'refs/heads/main'

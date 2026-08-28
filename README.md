@@ -14,7 +14,7 @@
   <img alt="R package included" src="https://img.shields.io/badge/R-Package-orange" />
   <img alt="Python 3.11" src="https://img.shields.io/badge/Python-3.11-blue" />
   <img alt="R-CMD-check" src="https://github.com/markusradke/shampoo/actions/workflows/R-CMD-check.yaml/badge.svg">
-  <img alt="R-CMD-check" src="https://github.com/markusradke/shampoo/actions/workflows/test-coverage.yaml/badge.svg">
+  <img alt="R-package test-coverage" src="https://raw.githubusercontent.com/markusradke/shampoo/coverage/badges/coverage.svg">
 </p>
 <!-- badges: end -->
 
