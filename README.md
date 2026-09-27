@@ -22,6 +22,10 @@
 
 >[!NOTE]
 > Paper details will be added upon publication.
+
+### Abstract
+Despite playlists’ popularity on streaming platforms, popular music genres remain a primary orientation scheme among listeners, industry, and researchers. Categorical genre assignments underpin foundational empirical musicological research, but ‘correct’ genre labels are often contested, raising concerns about reliability, validity, and comparability of research results. Contrarily, popular music studies have emphasized the listener-dependent and hierarchical nature of genre assignments – they may be considered as implicit majority voting results of a listener community. Adopting this notion, we present a methodology to assign genre categories based on folksonomy genre votes (SHAMPOO) and demonstrate its feasibility when used with MusicBrainz and 170,497 frequently listened tracks in Germany across the past 50 years (POPTRAG). The resulting hierarchical network for popular music in Germany comprises 265 genres that can be rescaled to any desired number of categories by exploiting latent hierarchical relationships in community tags. Subsequentially, we demonstrate reliability and validity of the procedure. Finally, for tracks lacking community votes, we develop machine learning classifiers at multiple granularity levels using freely-available music features and metadata from online databases. Exemplary results indicate our approach can assign an appropriate genre category to virtually any popular music track, representing listeners’ perspective in a transparent, reproducible, and intersubjectively comprehensible way. 
+
 ## Repository layout
 This repo primarily contains both, an R package containing SHAMPOO algorithm functions and an analysis pipeline for an exemplary analysis of a corpus of popular music that was frequently listend to in Germany of the past 50 years (POPTRAG).
 

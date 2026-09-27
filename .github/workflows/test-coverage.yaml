@@ -62,20 +62,17 @@ jobs:
           writeLines(color, "coverage_color.txt")          
         shell: Rscript {0}
 
+
       - name: Generate coverage badge
         run: |
           COVERAGE=$(cat coverage_percent.txt)
           COVERAGE_COLOR=$(cat coverage_color.txt)
-          
-          echo "Coverage: $COVERAGE%"
-          echo "Color: $COVERAGE_COLOR"
-          
-          mkdir -p badges
-          curl -s "https://raw.githubusercontent.com/pachadotdev/ghacoveragebadge/refs/heads/main/badges/${COVERAGE_COLOR}.svg" > badges/coverage.svg
 
-          # each badge contains a placeholder {{ COVERAGE }} that we replace with the actual coverage percentage
-          sed -i "s/{{ COVERAGE }}/${COVERAGE}/g" badges/coverage.svg
-          sed -i "s/coverage/R-package test-coverage/g" badges/coverage.svg
+          mkdir -p badges
+
+          curl -fsSL \
+            "https://img.shields.io/badge/R--package--test--coverage-${COVERAGE}%25-${COVERAGE_COLOR}.svg" \
+            -o badges/coverage.svg
         
       - name: Commit coverage badge
         if: github.ref == 'refs/heads/main'
