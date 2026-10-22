@@ -315,8 +315,9 @@ get_flow_summary <- function(long, hard_classes, perc_threshold = 1) {
     select(track.s.id, cat, cat_naive)
   flows <- count(hard_classes_naive, cat, cat_naive) |>
     group_by(cat) |>
-    mutate(prob = round(n / sum(n) * 100)) |>
+    mutate(prob = n / sum(n) * 100) |>
     filter(prob >= perc_threshold) |> # for better readability, only show flows with at least 1% of the total flow for each category
+    mutate(prob = round(prob)) |>
     arrange(cat, -n)
   k <- length(unique(hard_classes$cat))
   name_cat_col <- sprintf("SHAMPOO-G%d", k)
