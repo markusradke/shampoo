@@ -113,6 +113,7 @@ Please make sure you have the following R packages installed when running the sc
 - ggplot2
 - igraph
 - lightgbm
+- LiblineaR
 - Matrix
 - readr
 - reticulate

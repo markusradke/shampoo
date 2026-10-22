@@ -14,6 +14,12 @@ get_normalized_wide_vote_matrix <- function(long_dt) {
   )
   V <- as.matrix(wide[, -1, with = FALSE])
   Vt <- rowSums(V)
+  # check for rows with zero sum and stop if any are found
+  if (any(Vt == 0)) {
+    stop(
+      "Some tracks have zero total tag counts. Please check your input data."
+    )
+  }
   P <- V / Vt # normalize vote counts per track
   return(P)
 }
@@ -116,12 +122,16 @@ get_genre_categories_from_graph <- function(
   weights <- t(igraph::as_adjacency_matrix(g, attr = "weight", sparse = FALSE))
   weights <- weights[colnames(P), colnames(P)] # reorder weights to match P
 
-  weights_norm <- sweep(
-    weights,
+  out_sum <- colSums(weights)
+  weights_norm <- weights
+  has_outgoing <- out_sum > 0
+  weights_norm[, has_outgoing] <- sweep(
+    weights[, has_outgoing, drop = FALSE],
     2,
-    colSums(weights),
+    out_sum[has_outgoing],
     FUN = "/"
   )
+  weights_norm[, !has_outgoing] <- 0
   weights <- weights_norm
   rownames(weights) <- colnames(weights)
 
@@ -168,7 +178,7 @@ get_genre_categories_from_graph <- function(
     generality_ranks_norm <- rank(generality_wout_dangling) /
       length(generality_wout_dangling)
     score <- lambda * generality_ranks_norm + (1 - lambda) * sizes_ranks_norm
-    next_genre <- which.min(score)
+    next_genre <- match(names(which.min(score)), colnames(P))
   }
   i <- 1
   while (length(processed_genres) < G) {

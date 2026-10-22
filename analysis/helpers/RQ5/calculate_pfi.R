@@ -5,13 +5,13 @@ source("analysis/helpers/RQ5/pfi_feature_groups.R")
 source("analysis/helpers/RQ5/tuning_and_training.R")
 source("analysis/helpers/RQ5/evaluate_classifiers.R")
 
-evaluate_and_save_grouped_pfi_for_all_k_models <- function(
+evaluate_and_save_grouped_pfi_for_all_lightgbm_models <- function(
   ks,
   feature_groups,
   n_rep,
   random_state
 ) {
-  lgbm_importance <- get_holdout_permutation_feature_importance(
+  lgbm_importance <- get_holdout_permutation_feature_importance_lightgbm(
     KS = ks,
     feature_groups = feature_groups,
     random_state = random_state,
@@ -35,7 +35,7 @@ evaluate_and_save_grouped_pfi_for_all_k_models <- function(
 }
 
 
-get_holdout_permutation_feature_importance <- function(
+get_holdout_permutation_feature_importance_lightgbm <- function(
   KS,
   feature_groups,
   random_state = 42,
@@ -64,7 +64,7 @@ get_holdout_permutation_feature_importance <- function(
     X_holdout <- holdout$X_holdout
     y_holdout_hot <- holdout$y_hot_holdout
 
-    metrics <- evaluate_lgbm_model(
+    metrics <- evaluate_lightgbm_model(
       model,
       X_holdout,
       y_holdout_hot
@@ -91,7 +91,7 @@ get_holdout_permutation_feature_importance <- function(
         for (feature in current_features) {
           X_holdout_permuted[[feature]] <- sample(X_holdout_permuted[[feature]])
         }
-        metrics_perm <- evaluate_lgbm_model(
+        metrics_perm <- evaluate_lightgbm_model(
           model,
           X_holdout_permuted,
           y_holdout_hot

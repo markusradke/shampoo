@@ -1,4 +1,4 @@
-evaluate_final_model_on_holdout <- function(K, folds, holdout) {
+evaluate_final_lightgbm_model_on_holdout <- function(K, folds, holdout) {
   message(sprintf("Evaluating final lgbm model on holdout for K=%d", K))
   final_lgbm_model <- readRDS(sprintf(
     "models/classification/final_lgbm_model_k%d.rds",
@@ -6,21 +6,21 @@ evaluate_final_model_on_holdout <- function(K, folds, holdout) {
   ))
   holdout_data <- holdout$X_holdout
   y_holdout_hot <- holdout$y_hot_holdout
-  holdout_evaluation <- evaluate_lgbm_model(
+  holdout_evaluation <- evaluate_lightgbm_model(
     final_lgbm_model,
     holdout_data,
     y_holdout_hot,
     mode = "final"
   )
   print(holdout_evaluation$metrics)
-  plot <- plot_confusion_matrix(holdout_evaluation)
+  plot <- plot_lightgbm_confusion_matrix(holdout_evaluation)
   list(
     holdout_evaluation = holdout_evaluation,
     holdout_confusion_matrix_plot = plot
   )
 }
 
-evaluate_lgbm_model <- function(
+evaluate_lightgbm_model <- function(
   model,
   val_data,
   val_labels_hot_df,
@@ -47,6 +47,50 @@ evaluate_lgbm_model <- function(
       val_labels_hot_df
     )
   }
+}
+
+evaluate_linear_svm_model <- function(model, val_data, val_labels_hot_df) {
+  y_true <- factor(
+    val_labels_hot_df$cat,
+    levels = model$class_levels
+  )
+  y_pred <- predict_linear_svm(model, val_data)
+  metrics <- compute_metrics(y_pred, y_true)
+  list(
+    metrics = metrics,
+    y_pred = y_pred,
+    y_true = y_true
+  )
+}
+
+evaluate_final_linear_svm_model_on_holdout <- function(K, holdout) {
+  message(sprintf("Evaluating final linear SVM on holdout for K=%d", K))
+  model <- readRDS(sprintf(
+    "models/classification/final_linear_svm_model_k%d.rds",
+    K
+  ))
+  evaluation <- evaluate_linear_svm_model(
+    model,
+    holdout$X_holdout,
+    holdout$y_hot_holdout
+  )
+  print(evaluation$metrics)
+  list(
+    holdout_evaluation = evaluation,
+    holdout_confusion_matrix_plot = plot_svm_confusion_matrix(evaluation)
+  )
+}
+
+plot_svm_confusion_matrix <- function(evaluation) {
+  cm <- table(evaluation$y_true, evaluation$y_pred) |>
+    prop.table(margin = 1) |>
+    round(2) |>
+    as.data.frame()
+  names(cm) <- c("truth", "pred", "prob")
+  make_cm_plot(
+    cm,
+    sprintf("F1<sub>macro</sub> = %.3f", evaluation$metrics$F1_macro)
+  )
 }
 
 compute_metrics <- function(y_pred_hot, y_true_hot) {
@@ -166,8 +210,8 @@ get_label_certainty <- function(y_hot) {
 }
 
 
-plot_confusion_matrix <- function(holdout_evaluation) {
-  cm_plot_data <- prepare_lgbm_cm_plot_data(holdout_evaluation)
+plot_lightgbm_confusion_matrix <- function(holdout_evaluation) {
+  cm_plot_data <- prepare_lightgbm_cm_plot_data(holdout_evaluation)
   make_cm_plot(
     cm_plot_data$df,
     cm_plot_data$corner_label,
@@ -176,7 +220,7 @@ plot_confusion_matrix <- function(holdout_evaluation) {
 }
 
 
-prepare_lgbm_cm_plot_data <- function(holdout_evaluation) {
+prepare_lightgbm_cm_plot_data <- function(holdout_evaluation) {
   y_pred_hot <- holdout_evaluation$y_pred_hot
   y_true_hot <- holdout_evaluation$y_true_hot
   # get confusion matrix wih mean predicted probabilities for each cell
