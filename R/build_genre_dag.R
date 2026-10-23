@@ -21,6 +21,7 @@ get_normalized_wide_vote_matrix <- function(long_dt) {
     )
   }
   P <- V / Vt # normalize vote counts per track
+  rownames(P) <- wide$track.s.id
   return(P)
 }
 

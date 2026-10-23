@@ -51,12 +51,19 @@ ggsave(
 )
 
 P_one_hot <- get_one_hot_probs(mb)
+P_one_hot <- P_one_hot[rownames(P), colnames(P)]
+stopifnot(
+  identical(rownames(P), rownames(P_one_hot)),
+  all(rowSums(P_one_hot) == 1)
+)
+
 jsd_trajectory <- get_jsd_trajectory(
   cat_states,
   P,
   P_one_hot,
   ks = seq(2, ncol(P), 1)
 )
+
 saveRDS(
   jsd_trajectory,
   "models/dag/jsd_trajectory.rds"

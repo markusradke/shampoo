@@ -156,6 +156,7 @@ get_one_hot_probs <- function(long) {
 
   M_full <- dplyr::select(P_full, -track.s.id) |> as.matrix()
   M_hot <- dplyr::select(full_hot_norm, -track.s.id) |> as.matrix()
+  rownames(M_hot) <- full_hot_norm$track.s.id
   M_hot[, colnames(M_full)]
 }
 
@@ -228,7 +229,7 @@ plot_jsd_trajectory <- function(
     ) +
     ylim(0, 1) +
     geom_hline(
-      yintercept = 0,
+      yintercept = c(0, 1),
       linetype = "dashed",
       color = "grey45"
     ) +
@@ -245,9 +246,19 @@ plot_jsd_trajectory <- function(
     annotate(
       "text",
       x = xlim_max,
+      y = 1,
+      label = "max. information loss",
+      hjust = 1,
+      vjust = -0.5,
+      color = "grey45",
+      size = 4
+    ) +
+    annotate(
+      "text",
+      x = xlim_max,
       y = jsd_hot_full,
       label = sprintf(
-        "majority vote one-hot encoding (%d available genre categories)",
+        "majority vote one-hot encoding\n(%d available genre categories)",
         ncol(P)
       ),
       hjust = 1,
@@ -289,7 +300,7 @@ plot_full_jsd_trajectory <- function(
     ) +
     ylim(0, 1) +
     geom_hline(
-      yintercept = 0,
+      yintercept = c(0, 1),
       linetype = "dashed",
       color = "grey45"
     ) +
@@ -306,9 +317,19 @@ plot_full_jsd_trajectory <- function(
     annotate(
       "text",
       x = xlim_max,
+      y = 1,
+      label = "max. information loss",
+      hjust = 1,
+      vjust = 1.1,
+      color = "grey45",
+      size = 4
+    ) +
+    annotate(
+      "text",
+      x = xlim_max,
       y = jsd_hot_full,
       label = sprintf(
-        "majority vote one-hot encoding (%d available genre categories)",
+        "majority vote one-hot encoding\n(%d available genre categories)",
         ncol(P)
       ),
       hjust = 1,
