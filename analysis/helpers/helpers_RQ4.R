@@ -229,27 +229,28 @@ run_dz_compare <- function(
 }
 
 
-calc_ginis <- function(res_dc, res_dz, P, cat_states) {
-  hard_dc <- res_dc$hard_dc
-  hard_dz <- res_dz$hard_dz
-
-  dc_gini <- gini_vec(hard_dc$discogs_cat)
-  dz_gini <- gini_vec(hard_dz$deezer_cat)
-
-  no_dc <- count_unique(hard_dc$discogs_cat)
-  no_dz <- count_unique(hard_dz$deezer_cat)
-
-  mb_gini_dc <- get_mb_gini(P, cat_states, no_dc)
-  mb_gini_dz <- get_mb_gini(P, cat_states, no_dz)
-
+calc_ginis <- function(res_dc, res_dz, dc, dz, P, cat_states) {
+  dc_levels <- unique(dc$tag_name)
+  dz_levels <- unique(dz$tag_name)
   list(
-    dc_gini = dc_gini,
-    dz_gini = dz_gini,
-    mb_gini_dc = mb_gini_dc,
-    mb_gini_dz = mb_gini_dz
+    dc_gini = gini_vec(res_dc$hard_dc$discogs_cat, dc_levels),
+    dz_gini = gini_vec(res_dz$hard_dz$deezer_cat, dz_levels),
+    mb_gini_dc = get_mb_gini(
+      P,
+      cat_states,
+      length(dc_levels),
+      res_dc$hard_dc$track.s.id
+    ),
+    mb_gini_dz = get_mb_gini(
+      P,
+      cat_states,
+      length(dz_levels),
+      res_dz$hard_dz$track.s.id
+    ),
+    n_dc = length(dc_levels),
+    n_dz = length(dz_levels)
   )
 }
-
 
 get_tag_names <- function(dt, col) {
   dt[[col]] |> unique()
@@ -377,19 +378,27 @@ get_dz_translation_map <- function() {
   )
 }
 
-gini_vec <- function(vec) {
-  table(vec) |> DescTools::Gini()
+gini_vec <- function(vec, levels = NULL) {
+  counts <- if (is.null(levels)) {
+    table(vec)
+  } else {
+    table(factor(vec, levels = levels))
+  }
+  DescTools::Gini(as.numeric(counts), unbiased = TRUE)
 }
+
 
 count_unique <- function(vec) {
   length(unique(vec))
 }
 
-get_mb_gini <- function(P, cat_states, n_cat) {
-  get_track_category_probabilities(P, cat_states, n_cat) |>
-    pull(cat) |>
-    table() |>
-    DescTools::Gini()
+get_mb_gini <- function(P, cat_states, n_cat, track_ids = NULL) {
+  if (!is.null(track_ids)) {
+    P <- P[rownames(P) %in% track_ids, , drop = FALSE]
+  }
+  tm <- get_track_category_probabilities(P, cat_states, n_cat)
+  retained <- setdiff(colnames(tm), c("cat", "cat_prob"))
+  gini_vec(tm$cat, levels = retained)
 }
 
 get_hard_class_contingency <- function(
@@ -414,6 +423,21 @@ get_hard_class_contingency <- function(
     by = "track.s.id"
   ) |>
     as.data.frame()
+}
+
+prepare_single_category_data <- function(ext_long, taxonomy_label) {
+  tags <- dplyr::distinct(ext_long, track.s.id, tag_name)
+  freq <- dplyr::count(tags, tag_name, name = "n_tracks")
+  tags |>
+    dplyr::left_join(freq, by = "tag_name") |>
+    dplyr::group_by(track.s.id) |>
+    dplyr::arrange(n_tracks, tag_name, .by_group = TRUE) |> # least frequent first, alphabetical tie-break
+    dplyr::slice_head(n = 1) |>
+    dplyr::ungroup() |>
+    dplyr::transmute(
+      track.s.id,
+      !!paste0(tolower(taxonomy_label), "_cat") := tag_name
+    )
 }
 
 

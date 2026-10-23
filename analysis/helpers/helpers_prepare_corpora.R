@@ -43,6 +43,17 @@ prepare_musicbrainz_corpus <- function(
       "(%.4f%% in data set)"
     )
   )
+  low <- mb_long_tag_denoise |>
+    group_by(track.s.id) |>
+    summarise(v = sum(tag_count)) |>
+    filter(v < 2)
+  message(
+    sprintf(
+      "After removing tags, %d tracks have less than 2 votes (%.2f%% of all tracks).",
+      n = nrow(low),
+      share = 100 * (nrow(low) / n_distinct(mb_long_tag_denoise$track.s.id))
+    )
+  )
 
   mb_final <- mb_long_tag_denoise |>
     dplyr::select(-dplyr::matches("genres$"))
@@ -76,7 +87,7 @@ prepare_discogs_corpus <- function(
     min_prevalence = min_artist_prev,
     message_template = paste0(
       "Unique artists threshold for Discogs tags: %d ",
-      "(%.3f%% in data set)"
+      "(%.3f artist-tag combinations in data set)"
     )
   )
   message(sprintf(
@@ -109,7 +120,7 @@ prepare_deezer_corpus <- function(
     min_prevalence = min_artist_prev,
     message_template = paste0(
       "Unique artists threshold for Deezer tags: %d ",
-      "(%.3f%% in data set)"
+      "(%.3f artist-tag combinations in data set)"
     )
   )
   message(sprintf(
@@ -150,11 +161,11 @@ prepare_spotify_corpus <- function(
     min_prevalence = min_artist_prev,
     message_template = paste0(
       "Unique artists threshold for Spotify tags: %d ",
-      "(%.4f%% in data set)"
+      "(%.4f artist-tag combinations in data set)"
     )
   )
   message(sprintf(
-    "Retaind %d Spotify tags after denoising.",
+    "Retained %d Spotify tags after denoising.",
     nrow(distinct(s_long_tag_denoise, tag_name))
   ))
   s_long_tag_denoise

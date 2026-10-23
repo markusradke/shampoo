@@ -443,11 +443,15 @@ get_flow_summary <- function(long, hard_classes, perc_threshold = 1) {
     fill = 0
   ) |>
     pull(track.s.id)
+  # naive_votes <- data.frame(
+  #   track.s.id = ids,
+  #   cat_naive = apply(one_hot, 1, function(x) {
+  #     colnames(one_hot)[which.max(x)]
+  #   })
+  # )
   naive_votes <- data.frame(
-    track.s.id = ids,
-    cat_naive = apply(one_hot, 1, function(x) {
-      colnames(one_hot)[which.max(x)]
-    })
+    track.s.id = rownames(one_hot),
+    cat_naive = colnames(one_hot)[max.col(one_hot, ties.method = "first")]
   )
 
   hard_classes_naive <- left_join(
@@ -456,32 +460,38 @@ get_flow_summary <- function(long, hard_classes, perc_threshold = 1) {
     by = c("track.s.id")
   ) |>
     select(track.s.id, cat, cat_naive)
+
   flows <- count(hard_classes_naive, cat, cat_naive) |>
     group_by(cat) |>
-    mutate(prob = n / sum(n) * 100) |>
+    mutate(
+      prevalence = sum(n),
+      prevalence_rel = round(prevalence / nrow(hard_classes) * 100),
+      prob = n / sum(n) * 100
+    ) |>
     filter(prob >= perc_threshold) |> # for better readability, only show flows with at least 1% of the total flow for each category
     mutate(prob = round(prob)) |>
-    arrange(cat, -n)
+    arrange(cat, -n) |>
+    ungroup()
   k <- length(unique(hard_classes$cat))
   name_cat_col <- sprintf("SHAMPOO-G%d", k)
   flows_summary <- flows |>
     group_by(cat) |>
-    summarise(
-      prevalence = sum(n),
-      prevalence_prop = round(sum(n) / nrow(hard_classes) * 100),
+    summarize(
       `Original MusicBrainz Majority Vote Assignment` = paste0(
         cat_naive,
         " (",
         prob,
         "%)",
         collapse = ", "
-      )
+      ),
+      prevalence = unique(prevalence),
+      prevalence_rel = unique(prevalence_rel)
     ) |>
     mutate(
       !!name_cat_col := paste0(
         cat,
         "\n(",
-        ifelse(prevalence_prop == 0, "<1", prevalence_prop),
+        ifelse(prevalence_rel == 0, "<1", prevalence_rel),
         "%, n=",
         trimws(format(prevalence, big.mark = ",")),
         ")"

@@ -108,7 +108,7 @@ for (k in CHOSEN_Ks) {
       path = sprintf("reports/figures/flows_k%d.docx", k)
     )
 
-  # calcualte differentiation and boundary strength
+  # calculate differentiation and boundary strength
   flows_full <- get_flow_summary(mb, ids, perc_threshold = 0)
   differentiation <- flows_full$tracks |>
     group_by(cat) |>

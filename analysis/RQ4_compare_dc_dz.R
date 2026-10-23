@@ -31,7 +31,7 @@ res_dc <- run_dc_compare(
   load_states_if_exists = TRUE
 )
 ggsave(
-  "reports/figures/fig07_DC_contingency.png",
+  "reports/figures/fig08_DC_contingency.png",
   plot = res_dc$plot,
   width = 8,
   height = 6,
@@ -48,10 +48,10 @@ res_dz <- run_dz_compare(
   P,
   dag,
   cat_states,
-  load_states_if_exists = FALSE
+  load_states_if_exists = TRUE
 )
 ggsave(
-  "reports/figures/fig09_DZ_contingency.png",
+  "reports/figures/appendix/figC1_DZ_contingency.png",
   plot = res_dz$plot,
   width = 12,
   height = 10,
@@ -59,5 +59,5 @@ ggsave(
 )
 
 
-gini <- calc_ginis(res_dc, res_dz, P, cat_states)
+gini <- calc_ginis(res_dc, res_dz, dc, dz, P, cat_states)
 saveRDS(gini, "models/dag/ginis_comparison.rds")
