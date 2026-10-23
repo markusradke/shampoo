@@ -42,6 +42,13 @@ ggsave(
   height = 4.5,
   dpi = 600
 )
+plot_gini_genre_categories_full(cat_states)
+ggsave(
+  "reports/figures/appendix/figA1_gini_trajectory_full.png",
+  width = 6,
+  height = 4.5,
+  dpi = 600
+)
 
 P_one_hot <- get_one_hot_probs(mb)
 jsd_trajectory <- get_jsd_trajectory(
@@ -50,16 +57,24 @@ jsd_trajectory <- get_jsd_trajectory(
   P_one_hot,
   ks = seq(2, ncol(P), 1)
 )
-readr::write_csv(
+saveRDS(
   jsd_trajectory,
-  "models/dag/jsd_trajectory.csv"
+  "models/dag/jsd_trajectory.rds"
 )
-jsd_trajectory <- readr::read_csv(
-  "models/dag/jsd_trajectory.csv"
+jsd_trajectory <- readRDS(
+  "models/dag/jsd_trajectory.rds"
 )
-plot_jsd_trajectory(jsd_trajectory, xlim_max = 10, P)
+plot_jsd_trajectory(jsd_trajectory, xlim_max = 50, P)
 ggsave(
-  "reports/figures/fig04_jsd_trajectory.png",
+  "reports/figures/fig04_jsd_trajectory_max50.png",
+  width = 6,
+  height = 4.5,
+  dpi = 600
+)
+
+plot_full_jsd_trajectory(jsd_trajectory, P)
+ggsave(
+  "reports/figures/appendix/figA2_jsd_trajectory_full.png",
   width = 6,
   height = 4.5,
   dpi = 600

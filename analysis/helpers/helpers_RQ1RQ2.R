@@ -62,6 +62,59 @@ plot_gini_genre_categories <- function(cat_states, xlim_max, chosen_ks) {
     )
 }
 
+plot_gini_genre_categories_full <- function(cat_states) {
+  ginis <- cat_states$gini
+  g_out_sums <- cat_states$weights[[1]] |> colSums(na.rm = TRUE)
+  n_dangling <- length(g_out_sums[g_out_sums == 0])
+
+  xlim_max <- length(ginis)
+  no_genres <- length(ginis):1 + n_dangling - 1
+  ggplot(
+    data.frame(no_genres, gini = ginis),
+    aes(x = no_genres, y = gini)
+  ) +
+    geom_line(linewidth = 0.5) +
+    theme_minimal() +
+    labs(
+      x = "Number of Genre Categories",
+      y = "Gini Coefficient"
+    ) +
+    scale_x_continuous(
+      breaks = seq(0, xlim_max, by = 25),
+      limits = c(0, xlim_max)
+    ) +
+    ylim(0, 1) +
+    geom_hline(
+      yintercept = c(0, 1),
+      linetype = "dashed",
+      color = "grey45"
+    ) +
+    annotate(
+      "text",
+      x = xlim_max,
+      y = 0,
+      label = "totally uniform",
+      hjust = 1,
+      vjust = -0.5,
+      color = "grey45",
+      size = 4
+    ) +
+    annotate(
+      "text",
+      x = xlim_max,
+      y = 1,
+      label = "totally unequal",
+      hjust = 1,
+      vjust = -0.5,
+      color = "grey45",
+      size = 4
+    ) +
+    theme(
+      axis.text = element_text(size = 12),
+      axis.title = element_text(size = 14)
+    )
+}
+
 get_one_hot_probs <- function(long) {
   long <- dplyr::select(long, track.s.id, tag_name, tag_count)
   order_tags <- long |>
@@ -186,6 +239,67 @@ plot_jsd_trajectory <- function(
       label = "no information loss",
       hjust = 1,
       vjust = -0.5,
+      color = "grey45",
+      size = 4
+    ) +
+    annotate(
+      "text",
+      x = xlim_max,
+      y = jsd_hot_full,
+      label = sprintf(
+        "majority vote one-hot encoding (%d available genre categories)",
+        ncol(P)
+      ),
+      hjust = 1,
+      vjust = -0.5,
+      color = "#c40d20",
+      size = 4
+    ) +
+    theme(
+      axis.text = element_text(size = 12),
+      axis.title = element_text(size = 14)
+    )
+}
+
+plot_full_jsd_trajectory <- function(
+  jsd_trajectory,
+  P
+) {
+  xlim_max <- ncol(P)
+  trajectory <- jsd_trajectory$trajectory
+  jsd_hot_full <- jsd_trajectory$mean_one_hot
+  ggplot(
+    trajectory,
+    aes(x = chosen_k, y = mean_jsd)
+  ) +
+    geom_line(linewidth = 0.5) +
+    theme_minimal() +
+    labs(
+      x = "Number of Genre Categories",
+      y = "Mean JSD across tracks [0,1]"
+    ) +
+    scale_x_continuous(
+      breaks = seq(0, xlim_max, by = 25),
+      limits = c(0, xlim_max)
+    ) +
+    geom_hline(
+      yintercept = jsd_hot_full,
+      linetype = "dashed",
+      color = "#c40d20"
+    ) +
+    ylim(0, 1) +
+    geom_hline(
+      yintercept = 0,
+      linetype = "dashed",
+      color = "grey45"
+    ) +
+    annotate(
+      "text",
+      x = xlim_max,
+      y = 0,
+      label = "no information loss",
+      hjust = 1,
+      vjust = 1.1,
       color = "grey45",
       size = 4
     ) +
