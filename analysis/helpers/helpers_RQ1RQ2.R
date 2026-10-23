@@ -1,7 +1,7 @@
 library(dplyr)
 library(ggplot2)
 library(data.table)
-source("analysis/helpers/helpers_kl_divergence.R")
+source("analysis/helpers/helpers_jsd.R")
 
 plot_gini_genre_categories <- function(cat_states, xlim_max, chosen_ks) {
   ginis <- cat_states$gini
@@ -66,7 +66,7 @@ get_one_hot_probs <- function(long) {
   long <- dplyr::select(long, track.s.id, tag_name, tag_count)
   order_tags <- long |>
     dplyr::group_by(tag_name) |>
-    dplyr::summarise(total_count = sum(tag_count)) |>
+    dplyr::summarize(total_count = dplyr::n_distinct(track.s.id)) |>
     dplyr::arrange(-total_count) |>
     dplyr::select(tag_name) |>
     dplyr::mutate(rank = dplyr::row_number())
@@ -106,12 +106,12 @@ get_one_hot_probs <- function(long) {
   M_hot[, colnames(M_full)]
 }
 
-get_nkl_trajectory <- function(cat_states, P, P_hot, ks) {
-  kl_comparision <- data.frame(
+get_jsd_trajectory <- function(cat_states, P, P_hot, ks) {
+  jsd_comparison <- data.frame(
     chosen_k = integer(),
-    nkl = numeric()
+    jsd = numeric()
   )
-  kl_hot_full <- get_kl_divergences_mtx(P, P_hot)
+  jsd_hot_full <- get_jsd_mtx(P, P_hot)
 
   for (chosen_k in ks) {
     message(sprintf("Processing k = %d (max: %d)", chosen_k, max(ks)))
@@ -136,41 +136,46 @@ get_nkl_trajectory <- function(cat_states, P, P_hot, ks) {
     }
 
     track_probs <- track_probs[, colnames(P)]
-    kl_k <- get_kl_divergences_mtx(P, track_probs)
-    nkl <- 1 - median(kl_k) / median(kl_hot_full)
-    kl_comparision <- rbind(kl_comparision, data.frame(chosen_k, nkl))
+    jsd_k <- get_jsd_mtx(P, track_probs)
+    jsd_comparison <- rbind(
+      jsd_comparison,
+      data.frame(chosen_k, mean_jsd = mean(jsd_k))
+    )
   }
-  kl_comparision
+
+  list(trajectory = jsd_comparison, mean_one_hot = mean(jsd_hot_full))
 }
 
-plot_nkl_trajectory <- function(
-  nkl_trajcetory,
-  chosen_ks,
-  xlim_max = max(nkl_trajcetory$chosen_k)
+plot_jsd_trajectory <- function(
+  jsd_trajectory,
+  xlim_max = max(jsd_trajectory$chosen_k),
+  P
 ) {
+  trajectory <- jsd_trajectory$trajectory
+  jsd_hot_full <- jsd_trajectory$mean_one_hot
   ggplot(
-    nkl_trajcetory,
-    aes(x = chosen_k, y = nkl)
+    trajectory,
+    aes(x = chosen_k, y = mean_jsd)
   ) +
     geom_line(linewidth = 0.5) +
     geom_point(size = 1.5) +
     theme_minimal() +
     labs(
       x = "Number of Genre Categories",
-      y = "Normalized KL Divergence"
+      y = "Mean JSD across tracks [0,1]"
     ) +
     scale_x_continuous(
       breaks = seq(0, xlim_max, by = 5),
       limits = c(0, xlim_max)
     ) +
-    geom_vline(
-      xintercept = chosen_ks,
+    geom_hline(
+      yintercept = jsd_hot_full,
       linetype = "dashed",
       color = "#c40d20"
     ) +
-    ylim(min(0, min(nkl_trajcetory$nkl)), 1) +
+    ylim(0, 1) +
     geom_hline(
-      yintercept = c(0, 1),
+      yintercept = 0,
       linetype = "dashed",
       color = "grey45"
     ) +
@@ -178,7 +183,7 @@ plot_nkl_trajectory <- function(
       "text",
       x = xlim_max,
       y = 0,
-      label = "same as one-hot encoding",
+      label = "no information loss",
       hjust = 1,
       vjust = -0.5,
       color = "grey45",
@@ -187,11 +192,14 @@ plot_nkl_trajectory <- function(
     annotate(
       "text",
       x = xlim_max,
-      y = 1,
-      label = "no information loss",
+      y = jsd_hot_full,
+      label = sprintf(
+        "majority vote one-hot encoding (%d available genre categories)",
+        ncol(P)
+      ),
       hjust = 1,
       vjust = -0.5,
-      color = "grey45",
+      color = "#c40d20",
       size = 4
     ) +
     theme(

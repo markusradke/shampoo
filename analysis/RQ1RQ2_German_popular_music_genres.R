@@ -44,22 +44,22 @@ ggsave(
 )
 
 P_one_hot <- get_one_hot_probs(mb)
-nkl_trajectory <- get_nkl_trajectory(
+jsd_trajectory <- get_jsd_trajectory(
   cat_states,
   P,
   P_one_hot,
-  ks = seq(2, 100, 1)
+  ks = seq(2, ncol(P), 1)
 )
 readr::write_csv(
-  nkl_trajectory,
-  "models/dag/nkl_trajectory.csv"
+  jsd_trajectory,
+  "models/dag/jsd_trajectory.csv"
 )
-nkl_trajectory <- readr::read_csv(
-  "models/dag/nkl_trajectory.csv"
+jsd_trajectory <- readr::read_csv(
+  "models/dag/jsd_trajectory.csv"
 )
-plot_nkl_trajectory(nkl_trajectory, c(10, 26), xlim_max = 80)
+plot_jsd_trajectory(jsd_trajectory, xlim_max = 10, P)
 ggsave(
-  "reports/figures/fig04_nkl_trajectory.png",
+  "reports/figures/fig04_jsd_trajectory.png",
   width = 6,
   height = 4.5,
   dpi = 600
