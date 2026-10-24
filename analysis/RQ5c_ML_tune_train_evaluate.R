@@ -26,6 +26,11 @@ N_REP <- 20 # PFI
 CATEGORICAL_COLUMNS <- readr::read_csv(
   "data/classification_ready_data/categorical_columns.csv"
 )$column
+figure_number_lookup <- c(
+  "5" = "fig09",
+  "15" = "fig10",
+  "31" = "fig11"
+)
 
 # TUNING, TRAINING, EVALUATION (METRICS + PFI) ----
 for (K in KS) {
@@ -46,11 +51,6 @@ for (K in KS) {
     sprintf("models/classification/holdout_evaluation_lgbm_k%d.rds", K)
   )
 
-  figure_number_lookup <- c(
-    "5" = "fig09",
-    "15" = "fig10",
-    "31" = "fig11"
-  )
   plot_path <- sprintf(
     "reports/figures/%s_cm_lgbm_k%d.png",
     figure_number_lookup[as.character(K)],
