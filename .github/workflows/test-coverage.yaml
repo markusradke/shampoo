@@ -69,7 +69,6 @@ jobs:
           COVERAGE_COLOR=$(cat coverage_color.txt)
 
           mkdir -p badges
-
           curl -fsSL \
             "https://img.shields.io/badge/R--package--test--coverage-${COVERAGE}%25-${COVERAGE_COLOR}.svg" \
             -o badges/coverage.svg

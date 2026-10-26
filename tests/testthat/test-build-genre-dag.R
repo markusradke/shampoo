@@ -41,7 +41,7 @@ make_hierarchy <- function() {
     data.frame(
       from = c("rock", "electronic", "classical"),
       to = c("pop", "pop", "pop"),
-      weight = c(0.8, 0.6, 0.4)
+      weight = c(1, 1, 1)
     ),
     directed = TRUE,
     vertices = data.frame(name = c("rock", "electronic", "classical", "pop"))
@@ -84,6 +84,7 @@ test_that("DAG construction keeps all tags and only creates acyclic positive-wei
 
   edge_table <- igraph::as_data_frame(graph, what = "edges")
   expect_true(all(edge_table$weight > 0))
+  expect_true(all(abs(tapply(edge_table$weight, edge_table$from, sum) - 1) < 1e-12))
   expect_true(all(
     dag$generality[edge_table$from] < dag$generality[edge_table$to] |
       dag$generality[edge_table$from] == dag$generality[edge_table$to]

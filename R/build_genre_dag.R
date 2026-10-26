@@ -65,6 +65,7 @@ get_tag_dag_from_normalized_votes <- function(P) {
     weight = weights[edges]
   )
   E <- E[E$weight > 0, ]
+  E$weight <- E$weight / ave(E$weight, E$from, FUN = sum)
 
   g <- igraph::graph_from_data_frame(E, directed = TRUE)
   # add all nodes to the graph, even if they have no edges
@@ -123,17 +124,6 @@ get_genre_categories_from_graph <- function(
   weights <- t(igraph::as_adjacency_matrix(g, attr = "weight", sparse = FALSE))
   weights <- weights[colnames(P), colnames(P)] # reorder weights to match P
 
-  out_sum <- colSums(weights)
-  weights_norm <- weights
-  has_outgoing <- out_sum > 0
-  weights_norm[, has_outgoing] <- sweep(
-    weights[, has_outgoing, drop = FALSE],
-    2,
-    out_sum[has_outgoing],
-    FUN = "/"
-  )
-  weights_norm[, !has_outgoing] <- 0
-  weights <- weights_norm
   rownames(weights) <- colnames(weights)
 
   if (!fast) {

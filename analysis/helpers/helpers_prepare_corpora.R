@@ -34,15 +34,17 @@ prepare_musicbrainz_corpus <- function(
   combined_mb_genres <- combine_mb_genres(poptrag_selected)
   mb_long <- get_long_genre_tags(combined_mb_genres, "mb.genres")
   mb_long_music <- filter_non_valid_tags(mb_long, mb_non_valid_tags)
-  mb_long_vote_denoise <- filter_min_votes(mb_long_music, n_min_votes = 2)
   mb_long_tag_denoise <- filter_artist_prevalence(
-    mb_long_vote_denoise,
+    mb_long_music,
     min_prevalence = min_artist_prev,
     message_template = paste0(
       "Unique artists threshold for tags: %d ",
-      "(%.4f%% in data set)"
+      "(%.4f in data set)"
     )
-  )
+  ) |>
+    filter_min_votes(
+      n_min_votes = 2
+    )
   low <- mb_long_tag_denoise |>
     group_by(track.s.id) |>
     summarise(v = sum(tag_count)) |>

@@ -7,8 +7,8 @@ source("analysis/helpers/helpers_prepare_corpora.R")
 
 # USER SETTINGS ----
 MIN_VOTES <- 2
-MIN_ARTIST_PREV_MODEL <- 0.0005
-MIN_ARTIST_PREV_COMPARISON <- 0.001
+MIN_ARTIST_PREV_MODEL <- 0.001
+# MIN_ARTIST_PREV_COMPARISON <- 0.001 # TODO Reimplement; should be a min 100 tracks criterium
 
 MB_WHITELIST_PATH <- "data-raw/musicbrainz_genre_whitelist_20250616.rds"
 MB_NON_MUSIC_TAGS <- c(

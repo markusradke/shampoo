@@ -45,7 +45,7 @@ get_mode_with_tie_breaker <- function(x, tie_order) {
 
 
 filter_artist_prevalence <- function(tags, min_prevalence, message_template) {
-  thresh <- nrow(dplyr::distinct(tags, track.s.firstartist.id, tag_name)) * # here is the filter for artist tag-combinations
+  thresh <- nrow(dplyr::distinct(tags, track.s.firstartist.id)) *
     min_prevalence
   if (!is.null(message_template)) {
     message(sprintf(message_template, round(thresh), min_prevalence))
