@@ -187,7 +187,7 @@ compute_final_evaluation <- function(
       by = "cat"
     )
   kendall_tau <- cor(
-    f1_certainty$median_prob,
+    f1_certainty$mean_prob,
     f1_certainty$F1_scores,
     method = "kendall"
   )
@@ -195,7 +195,7 @@ compute_final_evaluation <- function(
   metrics <- data.frame(
     kappa = kappa,
     F1_macro = F1_macro,
-    median_certainty = certainties$median_prob[certainties$cat == "total"],
+    mean_certainty = certainties$mean_prob[certainties$cat == "total"],
     certainty_f1_kendall_tau = kendall_tau
   )
 
@@ -208,11 +208,11 @@ compute_final_evaluation <- function(
 }
 
 get_label_certainty <- function(y_hot) {
-  total <- data.frame(cat = "total", median_prob = y_hot$cat_prob |> median())
+  total <- data.frame(cat = "total", mean_prob = y_hot$cat_prob |> mean())
   per_class <- y_hot |>
     group_by(cat) |>
-    summarize(median_prob = median(cat_prob)) |>
-    arrange(desc(median_prob))
+    summarize(mean_prob = mean(cat_prob)) |>
+    arrange(desc(mean_prob))
   bind_rows(total, per_class)
 }
 
@@ -246,19 +246,19 @@ prepare_cm_plot_data <- function(holdout_evaluation) {
       by = c("truth" = "cat")
     ) |>
     mutate(
-      median_prob = round(median_prob * 100),
+      mean_prob = round(mean_prob * 100),
       f1 = round(F1_scores, 2),
-      truth = sprintf("%s (%s%% certain, F1=%.2f)", truth, median_prob, f1)
+      truth = sprintf("%s (%s%% certain, F1=%.2f)", truth, mean_prob, f1)
     ) |>
-    select(-median_prob, -F1_scores, -f1) |>
+    select(-mean_prob, -F1_scores, -f1) |>
     mutate(
       truth = factor(truth, levels = sort(unique(truth))),
       pred = factor(pred, levels = sort(unique(pred)))
     )
   label <- sprintf(
-    "F1<sub>macro</sub> = %.3f<br>Median Certainty = %d%%<br>Cor<sub>Kendall</sub>(F1, Certainty) = %.3f",
+    "F1<sub>macro</sub> = %.3f<br>Mean Certainty = %d%%<br>Cor<sub>Kendall</sub>(F1, Certainty) = %.3f",
     holdout_evaluation$metrics$F1_macro,
-    round(holdout_evaluation$metrics$median_certainty * 100),
+    round(holdout_evaluation$metrics$mean_certainty * 100),
     holdout_evaluation$metrics$certainty_f1_kendall_tau
   )
   list(df = cm_df_rich, corner_label = label)

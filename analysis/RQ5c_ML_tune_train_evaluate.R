@@ -6,8 +6,8 @@ library(yardstick)
 library(LiblineaR)
 # Assumes that the virtual environment ".venv" has been created in the project folder and the required packages have been installed
 Sys.setenv(
-  RETICULATE_PYTHON = ".venv/Scripts/python.exe" # Windows
-  # RETICULATE_PYTHON = ".venv/bin/python3" # Linux
+  # RETICULATE_PYTHON = ".venv/Scripts/python.exe" # Windows
+  RETICULATE_PYTHON = ".venv/bin/python3" # Linux
 )
 library(reticulate)
 py_config()
@@ -43,8 +43,6 @@ for (K in KS) {
   ))
   tune_and_save_lightgbm_model(K, folds, n_trials = N_TRIALS) # will skip if already exists
   retrain_and_save_best_parameters_lightgbm_model(K, folds) # will skip if already exists
-  tune_and_save_linear_svm_model(K, folds, n_trials = N_TRIALS)
-  retrain_and_save_best_parameters_linear_svm_model(K, folds)
   evaluation <- evaluate_final_lightgbm_model_on_holdout(K, folds, holdout)
   saveRDS(
     evaluation$holdout_evaluation,
@@ -65,6 +63,8 @@ for (K in KS) {
     dpi = 600
   )
 
+  tune_and_save_linear_svm_model(K, folds, n_trials = N_TRIALS)
+  retrain_and_save_best_parameters_linear_svm_model(K, folds)
   svm_evaluation <- evaluate_final_linear_svm_model_on_holdout(K, holdout)
   saveRDS(
     svm_evaluation$holdout_evaluation,

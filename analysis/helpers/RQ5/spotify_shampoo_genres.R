@@ -1,6 +1,11 @@
 source("analysis/helpers/shared_helpers.R")
 
-get_spotify_shampoo_map <- function(spotify, train_holdout, min_artist_prev) {
+get_spotify_shampoo_map <- function(
+  spotify,
+  train_holdout,
+  min_artist_prev,
+  lambda = 0.5
+) {
   #' Build a SHAMPOO mapping of Spotify artist genres to categories using the training data and apply it to the holdout data.
   #' @param spotify A data.table containing Spotify genre information. Columns should include track.s.id, tag_name, and tag_count.
   #' @param train_holdout A list containing character vectors with training and holdout track IDs.

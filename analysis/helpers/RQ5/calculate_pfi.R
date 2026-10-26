@@ -158,7 +158,7 @@ plot_pfi <- function(pfi_statistics) {
   # print pfi statistics for distribution genres
   pfi_statistics |>
     filter(
-      feature_group == "Spotify Artist Distribution Genre Map (27 features)"
+      feature_group == "Spotify Artist Distribution Genre Map (28 features)"
     ) |>
     select(k, mean_pfi, ci_lower, ci_upper) |>
     print()
