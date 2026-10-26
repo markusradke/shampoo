@@ -27,7 +27,7 @@ evaluate_and_save_grouped_pfi_for_all_lightgbm_models <- function(
   lgbm_importance_stats <- get_pfi_statistics(lgbm_importance)
   plot_pfi(lgbm_importance_stats)
   ggsave(
-    "reports/figures/fig13_pfi.png",
+    "reports/figures/fig11_pfi.png",
     width = 10,
     height = 8,
     dpi = 600
@@ -88,9 +88,12 @@ get_holdout_permutation_feature_importance_lightgbm <- function(
       for (i in seq(n_rep)) {
         message(sprintf("Repetition %d of %d", i, n_rep))
         X_holdout_permuted <- X_holdout
-        for (feature in current_features) {
-          X_holdout_permuted[[feature]] <- sample(X_holdout_permuted[[feature]])
-        }
+        row_permutation <- sample.int(nrow(X_holdout))
+        X_holdout_permuted[current_features] <- X_holdout[
+          row_permutation,
+          current_features,
+          drop = FALSE
+        ]
         metrics_perm <- evaluate_lightgbm_model(
           model,
           X_holdout_permuted,
@@ -150,7 +153,7 @@ plot_pfi <- function(pfi_statistics) {
   # do not display distribution genres in plot
   pfi_statistics_wout_distribution_genres <- pfi_statistics |>
     filter(
-      feature_group != "Spotify Artist Distribution Genre Map (27 features)"
+      feature_group != "Spotify Artist Distribution Genre Map (28 features)"
     )
   # print pfi statistics for distribution genres
   pfi_statistics |>

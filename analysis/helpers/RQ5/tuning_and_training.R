@@ -140,8 +140,8 @@ retrain_and_save_best_parameters_linear_svm_model <- function(K, folds) {
     K
   ))
   model <- train_linear_svm_model(
-    folds$X_train[[1]],
-    folds$y_hot_train[[1]],
+    rbind(folds$X_train[[1]], folds$X_val[[1]]),
+    rbind(folds$y_hot_train[[1]], folds$y_hot_val[[1]]),
     best_params
   )
   saveRDS(model, model_path)
