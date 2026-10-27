@@ -5,14 +5,15 @@ get_normalized_wide_vote_matrix <- function(long_dt) {
   #' @return A normalized wide vote matrix where rows correspond to tracks and columns correspond to genre tags. Each entry represents the normalized vote count for a tag for a given track. Rows sum to 1, representing the distribution of votes across tags for each track.
   #' @details The function takes a long data.table containing track-tag pairs and their corresponding vote counts, and converts it into a wide format where each row represents a track and each column represents a genre tag. If you have no detailed tag counts per track, we suggest you set these to one for all rows. The vote counts are then normalized for each track, so that the sum of votes across all tags for a given track equals 1. This normalized wide vote matrix can be used for further analysis, such as building a directed acyclic graph (DAG) of genre tags based on their co-occurrence and generality.
   #' @seealso \link{get_tag_dag_from_normalized_votes} for obtaining the directed acyclic graph of genre tags based on the normalized wide vote matrix.
-  #' @export
+  long_dt <- prepare_long_tag_data(long_dt)
   wide <- data.table::dcast(
     long_dt,
-    track.s.id ~ tag_name,
+    id ~ tag_name,
     value.var = "tag_count",
     fill = 0
   )
   V <- as.matrix(wide[, -1, with = FALSE])
+  colnames(V) <- setdiff(names(wide), "id")
   Vt <- rowSums(V)
   # check for rows with zero sum and stop if any are found
   if (any(Vt == 0)) {
@@ -21,7 +22,7 @@ get_normalized_wide_vote_matrix <- function(long_dt) {
     )
   }
   P <- V / Vt # normalize vote counts per track
-  rownames(P) <- wide$track.s.id
+  rownames(P) <- wide$id
   return(P)
 }
 
@@ -34,7 +35,6 @@ get_tag_dag_from_normalized_votes <- function(P) {
   #' - generality: A named vector of generality scores for each genre tag, where higher values indicate more general tags. Generality is calculated based on the weighted number of indegrees in the DAG, reflecting how many other tags act as subgenres for a given tag.
   #' @details The function takes a normalized wide vote matrix and calculates the joint and conditional probabilities of genre tags based on their co-occurrence across tracks. It then constructs an initital graph where edges represent the conditional probabilities of one tag given another, with weights corresponding to these probabilities. The generality of each tag is calculated based on the weighted number of indegrees in this initial graph, providing a measure of how many other tags act as subgenres for a given tag. Then, a directed acyclig graph (DAG) is contructed by allowing only connections form any given tag to tags with higher generality. The resulting DAG and generality scores can be used for further analysis, such as extracting genre categories and mapping tracks to these categories.
   #'@seealso \link{get_normalized_wide_vote_matrix} for obtaining the required input parameter.
-  #' @export
   message("Calculating probabilities and building trees...")
   N <- nrow(P)
   G <- ncol(P)

@@ -9,7 +9,9 @@ get_track_category_probabilities <- function(
   #' @param chosen_k An integer specifying the number of genre categories to consider in the final mapping. The function will use the final mapping corresponding to the chosen_k value to calculate the probabilities of each track belonging to each genre category.
   #' @return A data frame containing the probabilities of each track belonging to each genre category. The data frame also contains the most likely genre category for each track and the corresponding probability of that category. As a tiebreaker and favoring a more nuanced picture, the function will choose the genre that is mentioned least often in the dataset if there is a tie in probabilities for a track across multiple categories.
   #' @seealso \link{get_normalized_wide_vote_matrix} and \link{get_genre_categories_from_graph} for obtaining the required input parameters.
-  #' @export
+  if (chosen_k < 1 || chosen_k > nrow(res_list$mappings[[1]])) {
+    stop("chosen_k must correspond to an available category state.")
+  }
   if (chosen_k == 1) {
     # if chosen_k is 1, return the most relevant genre for all tracks
     most_relevant_genre <- res_list$relevance_order[1]
@@ -28,7 +30,7 @@ get_track_category_probabilities <- function(
   colnames(prob_track_map) <- colnames(final_mapping)
 
   final_genres <- res_list$final_genres[[G - chosen_k + 1]]
-  prob_track_map <- prob_track_map[, final_genres]
+  prob_track_map <- prob_track_map[, final_genres, drop = FALSE]
 
   cat <- apply(prob_track_map, 1, function(x) {
     max_indices <- which(x == max(x))
@@ -59,20 +61,20 @@ add_track_map_to_long <- function(long_dt, track_map) {
   #' @param track_map A data frame containing the probabilities of each track belonging to each genre category, as well as the most likely genre category and the corresponding probability for each track. The data frame should have columns: id, cat, cat_prob, and one column for each genre category representing the probability of that category for the given track. To obtain this data frame, use the \link{get_track_category_probabilities} function with the appropriate parameters.
   #' @return A long data frame containing the original track-tag pairs along with the mapped genre assignment probabilities for each track. The resulting data frame will have columns: id, tag_name, tag_count, cat, cat_prob, and one column for each genre category representing the probability of that category for the given track. It will also contain all original columns from the long_dt.
   #' @seealso \link{get_track_category_probabilities} for obtaining the required track mapping data frame.
-  #' @export
+  long_dt <- prepare_long_tag_data(long_dt)
   wide <- data.table::dcast(
     long_dt,
-    track.s.id ~ tag_name,
+    id ~ tag_name,
     value.var = "tag_count",
     fill = 0
   )
-  mapping <- cbind(track.s.id = wide$track.s.id, track_map)
-  long_dt <- merge(long_dt, mapping, by = "track.s.id", all.x = TRUE)
+  mapping <- cbind(id = wide$id, track_map)
+  long_dt <- merge(long_dt, mapping, by = "id", all.x = TRUE)
   long_dt
 }
 
 get_tag_name_ranks_for_size_tiebreaking <- function(P) {
-  P_binary <- P
+  P_binary <- as.matrix(P)
   P_binary[P_binary > 0] <- 1 # convert to binary matrix for number of appearances
   tag_name_counts <- colSums(as.matrix(P_binary))
   rank(tag_name_counts) |> sort()

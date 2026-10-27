@@ -86,12 +86,29 @@ Please use the following command in R to install the package:
 devtools::install_github("markusradke/shampoo")
 ```
 
-Please refer to the function documentation for details on usage. The functions are supposed to be used in the following order: 
-1. `get_normalized_wide_vote_matrix()` 
-2. `get_tag_dag_from_normalized_votes()`
-3. `get_genre_categories_from_graph()`
-4. `get_track_category_probabilities()`
-5. `add_track_map_to_long()`
+Please refer to the function documentation for details on usage. The package has three
+user-facing functions:
+
+1. `create_genre_dag()`
+2. `aggregate_genre_categories()`
+3. `assign_genre_categories()`
+
+For example:
+
+```r
+dag <- shampoo::create_genre_dag(tags)
+categories <- shampoo::aggregate_genre_categories(dag, lambda = 0.5)
+assignments <- shampoo::assign_genre_categories(
+  tags,
+  categories,
+  k = 10,
+  method = "both"
+)
+```
+
+Assignments contain one row per track. The default `"both"` method returns fuzzy
+category probabilities as well as the winning hard category and its probability.
+Use `method = "hard"` or `method = "fuzzy"` to request only one representation.
 
 Please make sure you start from long tabular data with columns: `id` (unique track identifier), `tag_name` (name of a genre tag) and `tag_count` (number of votes for this tag on the track; if unknown, we suggest setting this to 1). This should be loaded into a `data.table` using the function `fread` from the package with the same name.
 
