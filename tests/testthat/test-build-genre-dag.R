@@ -1,18 +1,18 @@
 make_long_genre_data <- function() {
   data.table::data.table(
     track.s.id = c(
-      1,
-      1,
-      2,
-      2,
-      3,
-      3,
-      4,
-      4,
-      5,
-      5,
-      6,
-      6
+      '1',
+      '1',
+      '2',
+      '2',
+      '3',
+      '3',
+      '4',
+      '4',
+      '5',
+      '5',
+      '6',
+      '6'
     ),
     tag_name = c(
       "rock",
@@ -60,7 +60,7 @@ test_that("normalized wide vote matrix has one row per track, sums to one, and p
     colnames(normalized_votes),
     c("classical", "electronic", "pop", "rock")
   )
-  expect_equal(rowSums(normalized_votes), rep(1, 6))
+  expect_equal(setNames(rowSums(normalized_votes), NULL), rep(1, 6))
   expect_equal(
     normalized_votes[1, ],
     c(classical = 0, electronic = 0, pop = 0.25, rock = 0.75)
@@ -84,7 +84,9 @@ test_that("DAG construction keeps all tags and only creates acyclic positive-wei
 
   edge_table <- igraph::as_data_frame(graph, what = "edges")
   expect_true(all(edge_table$weight > 0))
-  expect_true(all(abs(tapply(edge_table$weight, edge_table$from, sum) - 1) < 1e-12))
+  expect_true(all(
+    abs(tapply(edge_table$weight, edge_table$from, sum) - 1) < 1e-12
+  ))
   expect_true(all(
     dag$generality[edge_table$from] < dag$generality[edge_table$to] |
       dag$generality[edge_table$from] == dag$generality[edge_table$to]
@@ -111,7 +113,11 @@ test_that("category extraction returns a complete fixed-order state history", {
   expect_length(extraction$mappings, 4)
   expect_length(extraction$weights, 4)
   expect_length(extraction$sizes, 4)
-  expect_length(extraction$ginis, 4)
+  expect_equal(
+    names(extraction$metrics),
+    c("k", "gini", "onehot_acc")
+  )
+  expect_equal(extraction$metrics$k, 4:1)
   expect_length(extraction$final_genres, 4)
   expect_equal(extraction$final_genres[[1]], colnames(normalized_votes))
   expect_equal(extraction$final_genres[[4]], "pop")
@@ -131,8 +137,9 @@ test_that("category extraction returns a complete fixed-order state history", {
     extraction$mappings[[4]][3, ],
     setNames(rep(1, 4), colnames(normalized_votes))
   )
-  expect_true(all(is.finite(extraction$ginis[1:3])))
-  expect_true(is.nan(extraction$ginis[4]))
+  expect_true(all(is.finite(extraction$metrics$gini[1:3])))
+  expect_true(is.nan(extraction$metrics$gini[4]))
+  expect_equal(extraction$metrics$onehot_acc, c(1, 2 / 3, 1 / 2, 1 / 6))
 })
 
 test_that("automatic category extraction and fast fixed-order extraction are reproducible", {
@@ -163,7 +170,7 @@ test_that("automatic category extraction and fast fixed-order extraction are rep
   expect_true(all(automatic$processing_order %in% colnames(normalized_votes)))
   expect_equal(fast$processing_order, fixed_order)
   expect_length(fast$sizes, 0)
-  expect_null(fast$ginis)
+  expect_null(fast$metrics)
   expect_equal(fast$final_genres, fast_again$final_genres)
   expect_equal(fast$mappings, fast_again$mappings)
 })
@@ -209,7 +216,10 @@ test_that("track category probabilities reports categories and deterministic win
     c("pop", "pop", "classical", "pop", "pop", "classical")
   )
   expect_equal(two_categories$cat_prob, c(1, 1, 0.8, 1, 1, 0.5))
-  expect_equal(rowSums(two_categories[c("classical", "pop")]), rep(1, 6))
+  expect_equal(
+    setNames(rowSums(two_categories[c("classical", "pop")]), NULL),
+    rep(1, 6)
+  )
   expect_equal(one_category$cat, rep("pop", 6))
   expect_equal(one_category$cat_prob, rep(1, 6))
   expect_equal(one_category$pop, rep(1, 6))
@@ -293,4 +303,19 @@ test_that("size calculation counts dominant tags and includes zero-sized tags", 
   )
 
   expect_equal(sizes, c(alpha = 1, beta = 3, gamma = 0))
+})
+
+test_that("one-hot accuracy uses fixed full-distribution expected labels", {
+  track_mapping <- matrix(
+    c(0, 1, 0),
+    nrow = 1,
+    dimnames = list(NULL, c("a", "b", "c"))
+  )
+  accuracy <- shampoo:::calculate_one_hot_accuracy(
+    track_mapping = track_mapping,
+    tiebreak_order = c(a = 1, b = 2, c = 3),
+    baseline_winners = 1
+  )
+
+  expect_equal(accuracy, 0)
 })

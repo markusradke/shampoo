@@ -25,7 +25,7 @@ get_genre_categories_from_graph(
 
 \item{processing_order}{An optional vector of genre tag names specifying the order in which to process the tags. If NULL, the function will determine the order based on the sizes of the genre categories. Size is calculated based on the number of tracks associated with each genre tag, where only the tags with highest probability for a track are counted counted as dominant genres.}
 
-\item{fast}{Will skip calulation of sizes and ginis for each step which greatly speeds up the process. Only possible if processing order is provided, else will fall back to FALSE. Default is FALSE.}
+\item{fast}{Will skip calculation of sizes and metrics for each step, which greatly speeds up the process. Only possible if processing order is provided, else will fall back to FALSE. Default is FALSE.}
 }
 \value{
 A list containing:
@@ -33,7 +33,7 @@ A list containing:
 \item mappings: A list of mapping matrices representing the genre category mappings at each step of the folding process. Each mapping matrix has rows corresponding to genre tags and columns corresponding to genre categories, where each entry represents the weight of a genre tag in a given category.
 \item weights: A list of weight matrices representing the weights of the edges in the DAG at each step of the folding process. Each weight matrix has rows and columns corresponding to genre tags, where each entry represents the weight of the edge from one tag to another.
 \item sizes: A list of size vectors representing the sizes of the genre categories at each step of the folding process. Each size vector has entries corresponding to genre categories, where each entry represents the number of tracks associated with a given category.
-\item ginis: A vector of Gini coefficients representing the inequality of the sizes of the genre categories at each step of the folding process. A higher Gini coefficient indicates greater inequality in the sizes of the categories.
+\item metrics: A data frame with columns \code{k}, \code{gini}, and \code{onehot_acc}, containing one row per folding state.
 \item processing_order: A vector of genre tag names representing the order in which the tags were processed during the folding process.
 \item relevance_order: A vector of genre tag names representing the order of relevance of the tags, with dangling nodes (tags without supergenres) listed first, followed by the processed tags in reverse order of processing.
 \item final_genres: A list of vectors representing the final genre categories at each step of the folding process. Each vector contains the names of the genre categories that remain after processing a given number of tags.

@@ -1,10 +1,9 @@
 library(dplyr)
 library(ggplot2)
 library(data.table)
-source("analysis/helpers/helpers_jsd.R")
 
 plot_gini_genre_categories <- function(cat_states, xlim_max, chosen_ks) {
-  ginis <- cat_states$gini
+  ginis <- cat_states$metrics$gini
   g_out_sums <- cat_states$weights[[1]] |> colSums(na.rm = TRUE)
   n_dangling <- length(g_out_sums[g_out_sums == 0])
 
@@ -63,15 +62,14 @@ plot_gini_genre_categories <- function(cat_states, xlim_max, chosen_ks) {
 }
 
 plot_gini_genre_categories_full <- function(cat_states) {
-  ginis <- cat_states$gini
   g_out_sums <- cat_states$weights[[1]] |> colSums(na.rm = TRUE)
   n_dangling <- length(g_out_sums[g_out_sums == 0])
 
-  xlim_max <- length(ginis)
-  no_genres <- length(ginis):1 + n_dangling - 1
+  xlim_max <- nrow(cat_states$metrics)
+  # no_genres <- length(ginis):1 + n_dangling - 1
   ggplot(
-    data.frame(no_genres, gini = ginis),
-    aes(x = no_genres, y = gini)
+    cat_states$metrics,
+    aes(x = k, y = gini)
   ) +
     geom_line(linewidth = 0.5) +
     theme_minimal() +
@@ -80,7 +78,7 @@ plot_gini_genre_categories_full <- function(cat_states) {
       y = "Gini Coefficient"
     ) +
     scale_x_continuous(
-      breaks = seq(0, xlim_max, by = 25),
+      breaks = seq(0, xlim_max, by = 50),
       limits = c(0, xlim_max)
     ) +
     ylim(0, 1) +
@@ -160,72 +158,25 @@ get_one_hot_probs <- function(long) {
   M_hot[, colnames(M_full)]
 }
 
-get_jsd_trajectory <- function(cat_states, P, P_hot, ks) {
-  jsd_comparison <- data.frame(
-    chosen_k = integer(),
-    jsd = numeric()
-  )
-  jsd_hot_full <- get_jsd_mtx(P, P_hot)
 
-  for (chosen_k in ks) {
-    message(sprintf("Processing k = %d (max: %d)", chosen_k, max(ks)))
-    M_k <- P[, colnames(cat_states$mappings[[1]])]
-    cats <- get_track_category_probabilities(
-      M_k,
-      cat_states,
-      chosen_k
-    )
-    track_probs <- cats |>
-      dplyr::select(-cat, -cat_prob) |>
-      as.matrix()
-    missing_genres <- setdiff(colnames(M_k), colnames(track_probs))
-    if (length(missing_genres) > 0) {
-      track_probs <- cbind(
-        track_probs,
-        matrix(0, nrow = nrow(track_probs), ncol = length(missing_genres))
-      )
-      colnames(track_probs)[
-        (ncol(track_probs) - length(missing_genres) + 1):ncol(track_probs)
-      ] <- missing_genres
-    }
-
-    track_probs <- track_probs[, colnames(P)]
-    jsd_k <- get_jsd_mtx(P, track_probs)
-    jsd_comparison <- rbind(
-      jsd_comparison,
-      data.frame(chosen_k, mean_jsd = mean(jsd_k))
-    )
-  }
-
-  list(trajectory = jsd_comparison, mean_one_hot = mean(jsd_hot_full))
-}
-
-plot_jsd_trajectory <- function(
-  jsd_trajectory,
-  xlim_max = max(jsd_trajectory$chosen_k),
-  P
+plot_one_hot_acc_trajectory <- function(
+  cat_states,
+  xlim_max
 ) {
-  trajectory <- jsd_trajectory$trajectory
-  jsd_hot_full <- jsd_trajectory$mean_one_hot
   ggplot(
-    trajectory,
-    aes(x = chosen_k, y = mean_jsd)
+    cat_states$metrics,
+    aes(x = k, y = onehot_acc)
   ) +
     geom_line(linewidth = 0.5) +
     geom_point(size = 1.5) +
     theme_minimal() +
     labs(
       x = "Number of Genre Categories",
-      y = "Mean JSD across tracks [0,1]"
+      y = "Accuracy [0,1]"
     ) +
     scale_x_continuous(
       breaks = seq(0, xlim_max, by = 5),
       limits = c(0, xlim_max)
-    ) +
-    geom_hline(
-      yintercept = jsd_hot_full,
-      linetype = "dashed",
-      color = "#c40d20"
     ) +
     ylim(0, 1) +
     geom_hline(
@@ -236,18 +187,8 @@ plot_jsd_trajectory <- function(
     annotate(
       "text",
       x = xlim_max,
-      y = 0,
-      label = "no information loss",
-      hjust = 1,
-      vjust = -0.5,
-      color = "grey45",
-      size = 4
-    ) +
-    annotate(
-      "text",
-      x = xlim_max,
       y = 1,
-      label = "max. information loss",
+      label = "equal labels as one-hot encoding",
       hjust = 1,
       vjust = -0.5,
       color = "grey45",
@@ -256,14 +197,11 @@ plot_jsd_trajectory <- function(
     annotate(
       "text",
       x = xlim_max,
-      y = jsd_hot_full,
-      label = sprintf(
-        "majority vote one-hot encoding\n(%d available genre categories)",
-        ncol(P)
-      ),
+      y = 0,
+      label = "no labels equal to one-hot encoding",
       hjust = 1,
       vjust = -0.5,
-      color = "#c40d20",
+      color = "grey45",
       size = 4
     ) +
     theme(
@@ -272,31 +210,24 @@ plot_jsd_trajectory <- function(
     )
 }
 
-plot_full_jsd_trajectory <- function(
-  jsd_trajectory,
+plot_full_one_hot_acc_trajectory <- function(
+  cat_states,
   P
 ) {
   xlim_max <- ncol(P)
-  trajectory <- jsd_trajectory$trajectory
-  jsd_hot_full <- jsd_trajectory$mean_one_hot
   ggplot(
-    trajectory,
-    aes(x = chosen_k, y = mean_jsd)
+    cat_states$metrics,
+    aes(x = k, y = onehot_acc)
   ) +
     geom_line(linewidth = 0.5) +
     theme_minimal() +
     labs(
       x = "Number of Genre Categories",
-      y = "Mean JSD across tracks [0,1]"
+      y = "Accuracy [0,1]"
     ) +
     scale_x_continuous(
-      breaks = seq(0, xlim_max, by = 25),
+      breaks = seq(0, xlim_max, by = 50),
       limits = c(0, xlim_max)
-    ) +
-    geom_hline(
-      yintercept = jsd_hot_full,
-      linetype = "dashed",
-      color = "#c40d20"
     ) +
     ylim(0, 1) +
     geom_hline(
@@ -307,34 +238,21 @@ plot_full_jsd_trajectory <- function(
     annotate(
       "text",
       x = xlim_max,
-      y = 0,
-      label = "no information loss",
-      hjust = 1,
-      vjust = 1.1,
-      color = "grey45",
-      size = 4
-    ) +
-    annotate(
-      "text",
-      x = xlim_max,
       y = 1,
-      label = "max. information loss",
+      label = "equal labels as one-hot encoding",
       hjust = 1,
-      vjust = 1.1,
+      vjust = -0.4,
       color = "grey45",
       size = 4
     ) +
     annotate(
       "text",
       x = xlim_max,
-      y = jsd_hot_full,
-      label = sprintf(
-        "majority vote one-hot encoding\n(%d available genre categories)",
-        ncol(P)
-      ),
+      y = 0,
+      label = "no labels equal to one-hot encoding",
       hjust = 1,
-      vjust = -0.5,
-      color = "#c40d20",
+      vjust = 1.1,
+      color = "grey45",
       size = 4
     ) +
     theme(

@@ -128,8 +128,8 @@ get_or_build_cat_states_spotify <- function(
 
 build_gini_frame <- function(cat_states_s) {
   data.frame(
-    k = seq(2, length(cat_states_s$ginis) + 1),
-    gini = rev(cat_states_s$ginis)
+    k = rev(cat_states_s$metrics$k),
+    gini = rev(cat_states_s$metrics$gini)
   )
 }
 

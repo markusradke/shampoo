@@ -7,7 +7,7 @@ devtools::load_all()
 source("analysis/helpers/helpers_RQ1RQ2.R")
 
 LAMBDA <- 0.5
-CHOSEN_Ks <- c(5, 15, 31)
+CHOSEN_Ks <- c(5, 17, 32)
 
 # LOAD DATA ----
 mb <- data.table::fread("data/long_data/mb_long.csv")
@@ -50,38 +50,17 @@ ggsave(
   dpi = 600
 )
 
-P_one_hot <- get_one_hot_probs(mb)
-P_one_hot <- P_one_hot[rownames(P), colnames(P)]
-stopifnot(
-  identical(rownames(P), rownames(P_one_hot)),
-  all(rowSums(P_one_hot) == 1)
-)
-
-jsd_trajectory <- get_jsd_trajectory(
-  cat_states,
-  P,
-  P_one_hot,
-  ks = seq(2, ncol(P), 1)
-)
-
-saveRDS(
-  jsd_trajectory,
-  "models/dag/jsd_trajectory.rds"
-)
-jsd_trajectory <- readRDS(
-  "models/dag/jsd_trajectory.rds"
-)
-plot_jsd_trajectory(jsd_trajectory, xlim_max = 50, P)
+plot_one_hot_acc_trajectory(cat_states, xlim_max = 50)
 ggsave(
-  "reports/figures/fig04_jsd_trajectory_max50.png",
+  "reports/figures/fig04_one_hot_acc_trajectory_max50.png",
   width = 6,
   height = 4.5,
   dpi = 600
 )
 
-plot_full_jsd_trajectory(jsd_trajectory, P)
+plot_full_one_hot_acc_trajectory(cat_states, P)
 ggsave(
-  "reports/figures/appendix/figA2_jsd_trajectory_full.png",
+  "reports/figures/appendix/figA2_one_hot_acc_trajectory_full.png",
   width = 6,
   height = 4.5,
   dpi = 600

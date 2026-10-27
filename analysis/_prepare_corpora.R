@@ -1,11 +1,8 @@
-# Clean workspace and set parameters ----
 rm(list = ls())
 gc()
 library(ggplot2)
 source("analysis/helpers/helpers_prepare_corpora.R")
 
-
-# USER SETTINGS ----
 MIN_VOTES <- 2
 MIN_ARTIST_PREV_MODEL <- 0.001
 MIN_TRACKS_PER_TAG <- 100
