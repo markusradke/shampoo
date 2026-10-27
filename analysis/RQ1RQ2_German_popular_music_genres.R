@@ -10,19 +10,13 @@ LAMBDA <- 0.5
 CHOSEN_Ks <- c(5, 17, 32)
 
 # LOAD DATA ----
-mb <- data.table::fread("data/long_data/mb_long.csv")
+mb <- readr::read_csv("data/long_data/mb_long.csv", show_col_types = FALSE)
 
 # APPLY SHAMPOO ----
-P <- get_normalized_wide_vote_matrix(mb)
-readr::write_csv(
-  as.data.frame(P),
-  "data/normalized_voting_matrices/P_POPTRAG.csv"
-)
+dag <- shampoo::create_genre_dag(mb)
 
-dag <- get_tag_dag_from_normalized_votes(P)
-cat_states <- get_genre_categories_from_graph(
+cat_states <- shampoo::aggregate_genre_categories(
   dag,
-  P,
   lambda = LAMBDA
 )
 saveRDS(
@@ -58,7 +52,7 @@ ggsave(
   dpi = 600
 )
 
-plot_full_one_hot_acc_trajectory(cat_states, P)
+plot_full_one_hot_acc_trajectory(cat_states)
 ggsave(
   "reports/figures/appendix/figA2_one_hot_acc_trajectory_full.png",
   width = 6,
@@ -70,13 +64,14 @@ ggsave(
 # RQ2 NETWORKS OF SUPERGENRES ----
 for (k in CHOSEN_Ks) {
   message(sprintf("Processing k = %d (max: %d)", k, max(CHOSEN_Ks)))
-  save_chosen_k_supergenre_networks_gephi(cat_states, P, k)
+  save_chosen_k_supergenre_networks_gephi(cat_states, dag$track_matrix, k)
 }
 
+trackmaps <- shampoo::assign_genre_categories(mb, cat_states, CHOSEN_Ks)
 for (k in CHOSEN_Ks) {
   message(sprintf("Inspecting flows for k = %d", k))
-  trackmap <- get_track_category_probabilities(P, cat_states, k)
-  ids <- add_track_map_to_long(mb, trackmap) |> distinct(track.s.id, cat)
+  trackmap <- trackmaps[[as.character(k)]]
+  ids <- trackmap |> distinct(id, cat)
   flows_cutoff <- get_flow_summary(mb, ids, perc_threshold = 1)
   readr::write_csv(
     flows_cutoff$flows,

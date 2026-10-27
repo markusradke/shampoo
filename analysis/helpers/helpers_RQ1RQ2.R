@@ -114,16 +114,16 @@ plot_gini_genre_categories_full <- function(cat_states) {
 }
 
 get_one_hot_probs <- function(long) {
-  long <- dplyr::select(long, track.s.id, tag_name, tag_count)
+  long <- dplyr::select(long, id, tag_name, tag_count)
   order_tags <- long |>
     dplyr::group_by(tag_name) |>
-    dplyr::summarize(total_count = dplyr::n_distinct(track.s.id)) |>
+    dplyr::summarize(total_count = dplyr::n_distinct(id)) |>
     dplyr::arrange(-total_count) |>
     dplyr::select(tag_name) |>
     dplyr::mutate(rank = dplyr::row_number())
   hot <- long |>
     dplyr::left_join(order_tags, by = "tag_name") |>
-    dplyr::group_by(track.s.id) |>
+    dplyr::group_by(id) |>
     dplyr::arrange(-tag_count, -rank) |>
     dplyr::slice_head(n = 1) |>
     dplyr::ungroup()
@@ -136,10 +136,10 @@ get_one_hot_probs <- function(long) {
   )
   missing_cols <- setdiff(all_genres, colnames(full_hot_wide))
   full_hot_wide[missing_cols] <- 0
-  # make all non-zero values 1 (excep for column track.s.id)
+  # make all non-zero values 1 (except for the id column)
   full_hot_norm <- full_hot_wide |>
-    dplyr::mutate(dplyr::across(-track.s.id, ~ ifelse(. > 0, 1, 0))) |>
-    dplyr::arrange(track.s.id)
+    dplyr::mutate(dplyr::across(-id, ~ ifelse(. > 0, 1, 0))) |>
+    dplyr::arrange(id)
 
   full_wide <- long |>
     tidyr::pivot_wider(
@@ -149,12 +149,12 @@ get_one_hot_probs <- function(long) {
     )
   V <- full_wide[-1] |> as.matrix()
   P <- V / rowSums(V)
-  P_full <- cbind(select(full_wide, track.s.id), as.data.frame(P)) |>
-    dplyr::arrange(track.s.id)
+  P_full <- cbind(select(full_wide, id), as.data.frame(P)) |>
+    dplyr::arrange(id)
 
-  M_full <- dplyr::select(P_full, -track.s.id) |> as.matrix()
-  M_hot <- dplyr::select(full_hot_norm, -track.s.id) |> as.matrix()
-  rownames(M_hot) <- full_hot_norm$track.s.id
+  M_full <- dplyr::select(P_full, -id) |> as.matrix()
+  M_hot <- dplyr::select(full_hot_norm, -id) |> as.matrix()
+  rownames(M_hot) <- full_hot_norm$id
   M_hot[, colnames(M_full)]
 }
 
@@ -214,7 +214,7 @@ plot_full_one_hot_acc_trajectory <- function(
   cat_states,
   P
 ) {
-  xlim_max <- ncol(P)
+  xlim_max <- nrow(cat_states$metrics)
   ggplot(
     cat_states$metrics,
     aes(x = k, y = onehot_acc)
@@ -262,8 +262,13 @@ plot_full_one_hot_acc_trajectory <- function(
 }
 
 save_chosen_k_supergenre_networks_gephi <- function(cat_states, P, k) {
-  track_mapping <- get_track_category_probabilities(
-    P,
+  matrix_long <- data.frame(
+    id = rep(rownames(P), times = ncol(P)),
+    tag_name = rep(colnames(P), each = nrow(P)),
+    tag_count = as.vector(P)
+  )
+  track_mapping <- shampoo::assign_genre_categories(
+    matrix_long,
     cat_states,
     k
   )
@@ -356,11 +361,11 @@ get_flow_summary <- function(long, hard_classes, perc_threshold = 1) {
   one_hot <- get_one_hot_probs(long)
   ids <- dcast(
     long,
-    track.s.id ~ tag_name,
+    id ~ tag_name,
     value.var = "tag_count",
     fill = 0
   ) |>
-    pull(track.s.id)
+    pull(id)
   # naive_votes <- data.frame(
   #   track.s.id = ids,
   #   cat_naive = apply(one_hot, 1, function(x) {
@@ -368,16 +373,16 @@ get_flow_summary <- function(long, hard_classes, perc_threshold = 1) {
   #   })
   # )
   naive_votes <- data.frame(
-    track.s.id = rownames(one_hot),
+    id = rownames(one_hot),
     cat_naive = colnames(one_hot)[max.col(one_hot, ties.method = "first")]
   )
 
   hard_classes_naive <- left_join(
     hard_classes,
     naive_votes,
-    by = c("track.s.id")
+    by = c("id")
   ) |>
-    select(track.s.id, cat, cat_naive)
+    select(id, cat, cat_naive)
 
   flows <- count(hard_classes_naive, cat, cat_naive) |>
     group_by(cat) |>

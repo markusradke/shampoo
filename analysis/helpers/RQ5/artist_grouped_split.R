@@ -21,10 +21,10 @@ split_artist_level_genres <- function(
 
 
 get_artist_strata_genres <- function(mb, cat_states, chosen_k) {
-  P <- get_normalized_wide_vote_matrix(mb)
-  trackmap <- get_track_category_probabilities(P, cat_states, chosen_k)
-  trackmap_ids <- add_track_map_to_long(mb, trackmap) |>
-    distinct(track.s.id, track.s.firstartist.id, cat)
+  trackmap <- shampoo::assign_genre_categories(mb, cat_states, chosen_k)
+  trackmap_ids <- distinct(mb, id, track.s.firstartist.id) |>
+    inner_join(trackmap, by = "id") |>
+    distinct(id, track.s.firstartist.id, cat)
 
   cat_tie_order <- count(trackmap_ids, cat) |>
     arrange(n) |>
@@ -45,11 +45,14 @@ get_corpus_ids_with_labels <- function(
   chosen_k
 ) {
   corpus <- mb |>
-    filter(track.s.id %in% ids)
-  P <- get_normalized_wide_vote_matrix(corpus)
-  trackmap <- get_track_category_probabilities(P, cat_states, chosen_k)
-  trackmap_ids <- add_track_map_to_long(corpus, trackmap) |>
-    distinct(track.s.id, cat, cat_prob) |>
+    filter(id %in% ids)
+  trackmap_ids <- shampoo::assign_genre_categories(
+    corpus,
+    cat_states,
+    chosen_k,
+    method = "hard"
+  ) |>
+    distinct(id, cat, cat_prob) |>
     as.data.frame()
   trackmap_ids
 }

@@ -4,7 +4,7 @@
 \alias{get_track_category_probabilities}
 \title{Get the probabilities of each track belonging to each genre category based on the final mapping from the genre category extraction process.}
 \usage{
-get_track_category_probabilities(P, res_list, chosen_k)
+get_track_category_probabilities(P, res_list, chosen_k, tiebreak_order = NULL)
 }
 \arguments{
 \item{P}{A normalized wide vote matrix where rows correspond to tracks and columns correspond to genre tags. Each entry represents the normalized vote count for a tag for a given track. Rows sum to 1, representing the distribution of votes across tags for each track. To obtain this matrix, use the \link{get_normalized_wide_vote_matrix} function with the appropriate parameters.}

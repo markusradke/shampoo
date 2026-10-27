@@ -1,7 +1,9 @@
 get_track_category_probabilities <- function(
   P,
   res_list,
-  chosen_k
+  chosen_k,
+  tiebreak_order = NULL,
+  include_probabilities = TRUE
 ) {
   #' Get the probabilities of each track belonging to each genre category based on the final mapping from the genre category extraction process.
   #' @param P A normalized wide vote matrix where rows correspond to tracks and columns correspond to genre tags. Each entry represents the normalized vote count for a tag for a given track. Rows sum to 1, representing the distribution of votes across tags for each track. To obtain this matrix, use the \link{get_normalized_wide_vote_matrix} function with the appropriate parameters.
@@ -19,11 +21,17 @@ get_track_category_probabilities <- function(
       cat = rep(most_relevant_genre, nrow(P)),
       cat_prob = rep(1, nrow(P))
     )
+    if (!include_probabilities) {
+      rownames(prob_track_map) <- rownames(P)
+      return(prob_track_map)
+    }
     prob_track_map[most_relevant_genre] <- 1
     return(prob_track_map)
   }
   P <- Matrix::Matrix(P, sparse = TRUE)
-  tiebreak_order <- get_tag_name_ranks_for_size_tiebreaking(P)
+  if (is.null(tiebreak_order)) {
+    tiebreak_order <- get_tag_name_ranks_for_size_tiebreaking(P)
+  }
   G <- nrow(res_list$mappings[[1]])
   final_mapping <- res_list$mappings[[G - chosen_k + 1]]
   prob_track_map <- P %*% t(final_mapping)
@@ -32,24 +40,37 @@ get_track_category_probabilities <- function(
   final_genres <- res_list$final_genres[[G - chosen_k + 1]]
   prob_track_map <- prob_track_map[, final_genres, drop = FALSE]
 
-  cat <- apply(prob_track_map, 1, function(x) {
-    max_indices <- which(x == max(x))
-    if (length(max_indices) > 1) {
-      # tie breaker based on tiebreak_order
-      tiebreak_indices <- match(
-        colnames(prob_track_map)[max_indices],
-        names(tiebreak_order)
+  probability_matrix <- as.matrix(prob_track_map)
+  cat_indices <- max.col(probability_matrix, ties.method = "first")
+  cat_prob <- probability_matrix[
+    cbind(seq_len(nrow(probability_matrix)), cat_indices)
+  ]
+  ties <- which(rowSums(
+    probability_matrix == cat_prob
+  ) > 1L)
+  if (length(ties) > 0L) {
+    tiebreak_indices <- match(
+      colnames(probability_matrix),
+      names(tiebreak_order)
+    )
+    for (row_index in ties) {
+      tied <- which(
+        probability_matrix[row_index, ] == cat_prob[row_index]
       )
-      return(colnames(prob_track_map)[max_indices[which.min(tiebreak_indices)]])
-    } else {
-      return(colnames(prob_track_map)[max_indices])
+      cat_indices[row_index] <- tied[which.min(tiebreak_indices[tied])]
     }
-  })
-
-  cat_prob <- apply(prob_track_map, 1, max)
-  prob_track_map <- as.data.frame(as.matrix(prob_track_map))
+  }
+  cat <- colnames(probability_matrix)[cat_indices]
+  prob_track_map <- as.data.frame(probability_matrix)
   prob_track_map$cat <- cat
   prob_track_map$cat_prob <- cat_prob
+  if (!include_probabilities) {
+    return(data.frame(
+      cat = cat,
+      cat_prob = cat_prob,
+      row.names = rownames(P)
+    ))
+  }
   prob_track_map
 }
 

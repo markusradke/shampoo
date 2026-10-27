@@ -16,12 +16,17 @@ assign_genre_categories(
 
 \item{categories}{A result from \code{\link[=aggregate_genre_categories]{aggregate_genre_categories()}}.}
 
-\item{k}{Number of categories to use.}
+\item{k}{One or more numbers of categories to use. Multiple values return a
+named list of assignment data frames.}
 
 \item{method}{One of \code{"both"}, \code{"hard"}, or \code{"fuzzy"}.}
 }
 \value{
-One row per track containing category probabilities and assignments.
+One row per track containing category probabilities, assignments,
+and \code{assignment_status}, which is one of \code{"assigned"},
+\code{"partial_unknown_tags"}, or \code{"no_recognized_tags"}. Row names are not used
+as identifiers. When multiple \code{k} values are supplied, a named list of such
+data frames is returned.
 }
 \description{
 Assign hard and/or fuzzy categories to long-format track tags.

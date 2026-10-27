@@ -1,6 +1,6 @@
 make_long_genre_data <- function() {
   data.table::data.table(
-    track.s.id = c(
+    id = c(
       '1',
       '1',
       '2',
@@ -33,7 +33,7 @@ make_long_genre_data <- function() {
 }
 
 make_normalized_votes <- function() {
-  shampoo::get_normalized_wide_vote_matrix(make_long_genre_data())
+  shampoo:::get_normalized_wide_vote_matrix(make_long_genre_data())
 }
 
 make_hierarchy <- function() {
@@ -73,7 +73,7 @@ test_that("normalized wide vote matrix has one row per track, sums to one, and p
 
 test_that("DAG construction keeps all tags and only creates acyclic positive-weight edges", {
   normalized_votes <- make_normalized_votes()
-  dag <- shampoo::get_tag_dag_from_normalized_votes(normalized_votes)
+  dag <- shampoo:::get_tag_dag_from_normalized_votes(normalized_votes)
   graph <- dag$graph
 
   expect_s3_class(graph, "igraph")
@@ -96,7 +96,7 @@ test_that("DAG construction keeps all tags and only creates acyclic positive-wei
 test_that("category extraction returns a complete fixed-order state history", {
   normalized_votes <- make_normalized_votes()
   hierarchy <- make_hierarchy()
-  extraction <- shampoo::get_genre_categories_from_graph(
+  extraction <- shampoo:::get_genre_categories_from_graph(
     hierarchy,
     normalized_votes,
     processing_order = c("rock", "electronic", "classical", "pop")
@@ -147,18 +147,18 @@ test_that("automatic category extraction and fast fixed-order extraction are rep
   hierarchy <- make_hierarchy()
   fixed_order <- c("rock", "electronic", "classical")
 
-  automatic <- shampoo::get_genre_categories_from_graph(
+  automatic <- shampoo:::get_genre_categories_from_graph(
     hierarchy,
     normalized_votes,
     lambda = 0.25
   )
-  fast <- shampoo::get_genre_categories_from_graph(
+  fast <- shampoo:::get_genre_categories_from_graph(
     hierarchy,
     normalized_votes,
     processing_order = fixed_order,
     fast = TRUE
   )
-  fast_again <- shampoo::get_genre_categories_from_graph(
+  fast_again <- shampoo:::get_genre_categories_from_graph(
     hierarchy,
     normalized_votes,
     processing_order = fixed_order,
@@ -177,7 +177,7 @@ test_that("automatic category extraction and fast fixed-order extraction are rep
 
 test_that("category mappings preserve track probability mass", {
   normalized_votes <- make_normalized_votes()
-  extraction <- shampoo::get_genre_categories_from_graph(
+  extraction <- shampoo:::get_genre_categories_from_graph(
     make_hierarchy(),
     normalized_votes,
     processing_order = c("rock", "electronic", "classical")
@@ -192,18 +192,18 @@ test_that("category mappings preserve track probability mass", {
 
 test_that("track category probabilities reports categories and deterministic winners", {
   normalized_votes <- make_normalized_votes()
-  extraction <- shampoo::get_genre_categories_from_graph(
+  extraction <- shampoo:::get_genre_categories_from_graph(
     make_hierarchy(),
     normalized_votes,
     processing_order = c("rock", "electronic", "classical")
   )
 
-  two_categories <- shampoo::get_track_category_probabilities(
+  two_categories <- shampoo:::get_track_category_probabilities(
     normalized_votes,
     extraction,
     chosen_k = 2
   )
-  one_category <- shampoo::get_track_category_probabilities(
+  one_category <- shampoo:::get_track_category_probabilities(
     normalized_votes,
     extraction,
     chosen_k = 1
@@ -249,7 +249,7 @@ test_that("track category probabilities resolves ties using tag prevalence", {
     relevance_order = c("common", "rare")
   )
 
-  result <- shampoo::get_track_category_probabilities(
+  result <- shampoo:::get_track_category_probabilities(
     normalized_votes,
     extraction,
     2
@@ -268,12 +268,12 @@ test_that("long genre data receives the track-level mapping", {
   )
   track_map$rock <- track_map$cat == "rock"
 
-  mapped <- shampoo::add_track_map_to_long(long_data, track_map)
+  mapped <- shampoo:::add_track_map_to_long(long_data, track_map)
 
   expect_equal(nrow(mapped), nrow(long_data))
   expect_true(all(c("cat", "cat_prob", "rock") %in% names(mapped)))
   expect_equal(
-    mapped$cat_prob[match(1:6, mapped$track.s.id)],
+    mapped$cat_prob[match(1:6, mapped$id)],
     c(0.75, 0.75, 2 / 3, 2 / 3, 0.8, 0.8)
   )
   expect_equal(mapped$tag_count, long_data$tag_count)

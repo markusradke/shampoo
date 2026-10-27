@@ -7,7 +7,7 @@ get_spotify_shampoo_map <- function(
   lambda = 0.5
 ) {
   #' Build a SHAMPOO mapping of Spotify artist genres to categories using the training data and apply it to the holdout data.
-  #' @param spotify A data.table containing Spotify genre information. Columns should include track.s.id, tag_name, and tag_count.
+  #' @param spotify A data.table containing Spotify genre information. Columns should include id, tag_name, and tag_count.
   #' @param train_holdout A list containing character vectors with training and holdout track IDs.
   #' @param min_artist_prev A numeric value specifying the minimum prevalence of a genre tag on unique artist level in the training data.
   #' @param lambda A numeric value specifying the lambda parameter for the SHAMPOO algorithm.
@@ -18,16 +18,16 @@ get_spotify_shampoo_map <- function(
     train_tracks = train_holdout$train_tracks,
     min_artist_prev
   )
-  P_s_train <- get_normalized_wide_vote_matrix(spotify_train)
+  spotify_train_dag <- shampoo::create_genre_dag(spotify_train)
+  P_s_train <- spotify_train_dag$tag_matrix
   binary_cols <- get_binary_columns(P_s_train)
   spotify_train_filtered <- filter_binary_genres(
     spotify_train = spotify_train,
     binary_columns = binary_cols
   )
 
-  P_s_train_filtered <- get_normalized_wide_vote_matrix(
-    spotify_train_filtered
-  )
+  spotify_train_dag <- shampoo::create_genre_dag(spotify_train_filtered)
+  P_s_train_filtered <- spotify_train_dag$tag_matrix
 
   spotify_holdout <- build_spotify_holdout(
     spotify = spotify,
@@ -35,18 +35,16 @@ get_spotify_shampoo_map <- function(
     train_tag_cols = colnames(P_s_train_filtered)
   )
 
-  dag_s_train <- get_tag_dag_from_normalized_votes(P_s_train_filtered)
   cat_states_s <- get_or_build_cat_states_spotify(
-    dag_s_train = dag_s_train,
-    P_s_train = P_s_train_filtered,
+    dag_s_train = spotify_train_dag,
     lambda
   )
 
   ginis <- build_gini_frame(cat_states_s)
   chosen_k <- choose_k_from_gini(ginis)
 
-  s_trackmap_train <- get_track_category_probabilities(
-    P_s_train_filtered,
+  s_trackmap_train <- shampoo::assign_genre_categories(
+    spotify_train_filtered,
     cat_states_s,
     chosen_k
   )
@@ -58,14 +56,8 @@ get_spotify_shampoo_map <- function(
     to_remove
   )
 
-  P_s_holdout <- get_normalized_wide_vote_matrix(spotify_holdout)
-  P_s_holdout_padded <- pad_vote_matrix(
-    P_s_holdout,
-    colnames(P_s_train_filtered)
-  )
-
-  s_trackmap_holdout <- get_track_category_probabilities(
-    P_s_holdout_padded,
+  s_trackmap_holdout <- shampoo::assign_genre_categories(
+    spotify_holdout,
     cat_states_s,
     chosen_k
   )
@@ -84,7 +76,7 @@ get_spotify_shampoo_map <- function(
 
 build_spotify_train <- function(spotify, train_tracks, min_artist_prev) {
   spotify |>
-    filter(track.s.id %in% train_tracks) |>
+    filter(id %in% train_tracks) |>
     filter_artist_prevalence(
       min_prevalence = min_artist_prev,
       message_template = "Filtering Spotify training data to artists with at least %d tracks (%.4f prevalence)"
@@ -104,21 +96,19 @@ filter_binary_genres <- function(spotify_train, binary_columns) {
 
 build_spotify_holdout <- function(spotify, test_tracks, train_tag_cols) {
   spotify |>
-    filter(track.s.id %in% test_tracks) |>
+    filter(id %in% test_tracks) |>
     filter(tag_name %in% train_tag_cols)
 }
 
 get_or_build_cat_states_spotify <- function(
   dag_s_train,
-  P_s_train,
   lambda = 0.5
 ) {
   if (file.exists("models/dag/cat_states_spotify.rds")) {
     readRDS("models/dag/cat_states_spotify.rds")
   } else {
-    cat_states_s <- get_genre_categories_from_graph(
+    cat_states_s <- shampoo::aggregate_genre_categories(
       dag_s_train,
-      P_s_train,
       lambda = lambda
     )
     saveRDS(cat_states_s, "models/dag/cat_states_spotify.rds")
@@ -159,18 +149,16 @@ build_track_features <- function(
   trackmap,
   to_remove
 ) {
-  add_track_map_to_long(
-    spotify_long,
-    trackmap
-  ) |>
-    select(track.s.id, all_of(colnames(trackmap))) |>
+  spotify_long |>
+    inner_join(trackmap, by = "id") |>
+    select(id, all_of(colnames(trackmap))) |>
     select(-cat, -cat_prob) |>
     select(-all_of(to_remove)) |>
-    distinct(track.s.id, .keep_all = TRUE) |>
-    rename_with(~ paste0("sp_", .), -track.s.id) |>
-    rename_with(~ gsub(" ", "_", .), -track.s.id) |>
-    rename_with(~ gsub("&", "_", .), -track.s.id) |>
-    rename_with(~ gsub("-", "_", .), -track.s.id)
+    distinct(id, .keep_all = TRUE) |>
+    rename_with(~ paste0("sp_", .), -id) |>
+    rename_with(~ gsub(" ", "_", .), -id) |>
+    rename_with(~ gsub("&", "_", .), -id) |>
+    rename_with(~ gsub("-", "_", .), -id)
 }
 
 

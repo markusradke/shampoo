@@ -16,8 +16,8 @@ mb_genres <- get_tag_names(mb, "tag_name")
 dc_genres <- get_tag_names(dc, "tag_name")
 dz_genres <- get_tag_names(dz, "tag_name")
 
-P <- get_normalized_wide_vote_matrix(mb)
-dag <- get_tag_dag_from_normalized_votes(P)
+dag <- shampoo::create_genre_dag(mb)
+P <- dag$tag_matrix
 
 # COMPARE TO DC ----
 dc_equivalent <- get_dc_equiv_sets(mb_genres, dc_genres)

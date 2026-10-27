@@ -21,7 +21,7 @@ aggregate_genre_categories(
 \item{fast}{Whether to skip state metrics when an explicit order is supplied.}
 }
 \value{
-Category state history.
+Category state history, including the reusable normalized tag matrix.
 }
 \description{
 Aggregate a genre DAG into category states.

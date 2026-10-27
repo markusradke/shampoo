@@ -8,7 +8,7 @@ get_assignments_to_compare <- function(
   n_bins = 5
 ) {
   #' Get the order and track assignments for two random splits of a long data frame of music tracks with tags, for a random state, lambda parameter, and maximum number of genre categories (k).
-  #' @param mb A long data frame of music tracks with columns for track.s.id, firstartist.id, album.s.releaseyear, artist.s.popularity, tag_name, tag_count.
+  #' @param mb A long data frame of music tracks with columns for id, firstartist.id, album.s.releaseyear, artist.s.popularity, tag_name, tag_count.
   #' @param random_state A random seed for reproducibility (default is 42).
   #' @param lambda The size / generality tradeoff parameter for the SHAMPOO algorithm (default is 0.5).
   #' @param max_k The maximum number of genre categories to check for reliability (default is 10, always starts at 2).
@@ -20,16 +20,15 @@ get_assignments_to_compare <- function(
     seed = random_state,
     n_bins = 5
   )
-  P_holdout <- get_normalized_wide_vote_matrix(splits$holdout)
   assignments_1 <- get_order_and_track_assignments(
     splits$fold_1,
-    P_holdout,
+    splits$holdout,
     lambda,
     max_k
   )
   assignments_2 <- get_order_and_track_assignments(
     splits$fold_2,
-    P_holdout,
+    splits$holdout,
     lambda,
     max_k
   )
@@ -76,7 +75,7 @@ stratified_split_1_2_holdout <- function(long, seed, n_bins = 5) {
   #' Split a long data frame of tracks with tags into two folds and holdout set of equal size (number of artists).
   #' At the artist level, stratified by popularity and release year (each binned).
   #' @param long A long data frame of tracks with tags. Must containc columns:
-  #' track.s.id, track.s.firstartist.id, artist.s.popularity, album.s.releaseyear.
+  #' id, track.s.firstartist.id, artist.s.popularity, album.s.releaseyear.
   #' @param seed A random seed for reproducibility.
   #' @param n_bins The number of bins to use for stratification (default is 5).
   #' @return A list containing three elements: fold_1, fold_2, and holdout, which are data frames of tracks with tags for each split.
@@ -87,9 +86,9 @@ stratified_split_1_2_holdout <- function(long, seed, n_bins = 5) {
     n_bins = n_bins
   )
   holdout <- long |>
-    filter(track.s.id %in% initial_split_ids$test_tracks)
+    filter(id %in% initial_split_ids$test_tracks)
   train <- long |>
-    filter(track.s.id %in% initial_split_ids$train_tracks)
+    filter(id %in% initial_split_ids$train_tracks)
   fold_split_ids <- split_artist_level_popularity_release_year(
     train,
     test_size = 0.5,
@@ -97,9 +96,9 @@ stratified_split_1_2_holdout <- function(long, seed, n_bins = 5) {
     n_bins = n_bins
   )
   fold_1 <- train |>
-    filter(track.s.id %in% fold_split_ids$train_tracks)
+    filter(id %in% fold_split_ids$train_tracks)
   fold_2 <- train |>
-    filter(track.s.id %in% fold_split_ids$test_tracks)
+    filter(id %in% fold_split_ids$test_tracks)
   return(list(fold_1 = fold_1, fold_2 = fold_2, holdout = holdout))
 }
 
@@ -171,28 +170,22 @@ get_artist_strata <- function(mb, n_bins) {
 
 get_order_and_track_assignments <- function(
   fold,
-  P_holdout,
+  holdout,
   lambda = 0.5,
   max_k = 100
 ) {
-  G <- ncol(P_holdout)
+  G <- length(unique(fold$tag_name))
   max_genres <- min(max_k, G)
-  P <- get_normalized_wide_vote_matrix(fold)
-  dag <- get_tag_dag_from_normalized_votes(P)
-  cat_states <- get_genre_categories_from_graph(dag, P, lambda)
-  assignments <- list()
-  for (k in seq(1, max_genres, by = 1)) {
-    message(sprintf(
-      "Getting track assignments for k = %d/%d",
-      k,
-      max_genres
-    ))
-    trackmap <- get_track_category_probabilities(
-      P = P_holdout,
-      res_list = cat_states,
-      chosen_k = k
-    )
-    assignments[[k]] <- trackmap
+  dag <- shampoo::create_genre_dag(fold)
+  cat_states <- shampoo::aggregate_genre_categories(dag, lambda)
+  assignments <- shampoo::assign_genre_categories(
+    holdout,
+    cat_states,
+    k = seq(1, max_genres),
+    method = "both"
+  )
+  if (!is.list(assignments)) {
+    assignments <- list(assignments)
   }
   list(assignments = assignments, order = cat_states$relevance_order)
 }

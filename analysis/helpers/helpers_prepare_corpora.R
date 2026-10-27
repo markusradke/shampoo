@@ -60,7 +60,7 @@ prepare_musicbrainz_corpus <- function(
   ))
 
   mb_final <- mb_long_tag_denoise |>
-    dplyr::select(-dplyr::matches("genres$"))
+    dplyr::select(-dplyr::matches("genres$"), id = track.s.id)
   mb_final
 }
 
@@ -77,7 +77,7 @@ prepare_discogs_corpus <- function(
   dc_long <- dc |>
     tidyr::separate_rows(album.dc.genres_str, sep = "; ") |>
     dplyr::rename(tag_name = album.dc.genres_str) |>
-    dplyr::select(track.s.id, track.s.firstartist.id, tag_name) |>
+    dplyr::select(id = track.s.id, track.s.firstartist.id, tag_name) |>
     dplyr::mutate(tag_count = 1L) |>
     dplyr::filter(!tag_name %in% c("Non-Music", "Children's", ""))
 
@@ -109,7 +109,7 @@ prepare_deezer_corpus <- function(
   dz_long <- dz |>
     tidyr::separate_rows(album.dz.genres_str, sep = "; ") |>
     dplyr::rename(tag_name = album.dz.genres_str) |>
-    dplyr::select(track.s.id, track.s.firstartist.id, tag_name) |>
+    dplyr::select(id = track.s.id, track.s.firstartist.id, tag_name) |>
     dplyr::mutate(tag_count = 1L) |>
     dplyr::filter(!tag_name %in% dz_non_music_tags)
 
@@ -157,7 +157,7 @@ prepare_spotify_corpus <- function(
 
   s_long <- dplyr::select(
     poptrag_selected,
-    track.s.id,
+    id = track.s.id,
     track.s.firstartist.id,
     artist.s.genre_str
   ) |>
@@ -186,7 +186,7 @@ prepare_spotify_corpus <- function(
 plot_corpus_composition <- function(mb_long) {
   selected <- dplyr::distinct(
     mb_long,
-    track.s.id,
+    id,
     album.s.releaseyear,
     artist.s.popularity
   )

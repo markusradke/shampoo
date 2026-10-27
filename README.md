@@ -104,11 +104,26 @@ assignments <- shampoo::assign_genre_categories(
   k = 10,
   method = "both"
 )
+
+# Several granularities are prepared in one pass:
+assignments_by_k <- shampoo::assign_genre_categories(
+  tags,
+  categories,
+  k = c(5, 10, 20)
+)
 ```
 
 Assignments contain one row per track. The default `"both"` method returns fuzzy
 category probabilities as well as the winning hard category and its probability.
+Each result also includes `assignment_status`: `"assigned"` for tracks whose
+tags were all recognized, `"partial_unknown_tags"` when some input tags were
+unknown, and `"no_recognized_tags"` when none of a track's tags were recognized.
+Track identifiers are provided only in the `id` column; row names are not used
+as identifiers.
 Use `method = "hard"` or `method = "fuzzy"` to request only one representation.
+When multiple values are supplied for `k`, the result is a named list with one
+assignment data frame per requested value. The DAG and category objects retain
+the normalized tag matrix and canonical tag order for reproducible reuse.
 
 Please make sure you start from long tabular data with columns: `id` (unique track identifier), `tag_name` (name of a genre tag) and `tag_count` (number of votes for this tag on the track; if unknown, we suggest setting this to 1). This should be loaded into a `data.table` using the function `fread` from the package with the same name.
 

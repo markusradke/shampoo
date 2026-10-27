@@ -318,9 +318,8 @@ get_equiv_plot_order <- function(equiv) {
 }
 
 build_cat_states <- function(dag, P, proc_order, rds_path) {
-  cat_states_comp <- get_genre_categories_from_graph(
+  cat_states_comp <- shampoo::aggregate_genre_categories(
     dag,
-    P,
     processing_order = proc_order,
     fast = TRUE
   )
@@ -396,7 +395,12 @@ get_mb_gini <- function(P, cat_states, n_cat, track_ids = NULL) {
   if (!is.null(track_ids)) {
     P <- P[rownames(P) %in% track_ids, , drop = FALSE]
   }
-  tm <- get_track_category_probabilities(P, cat_states, n_cat)
+  tm <- shampoo::assign_genre_categories(
+    data.frame(id = rownames(P), tag_name = rep(colnames(P), each = nrow(P)),
+               tag_count = as.vector(P)),
+    cat_states,
+    n_cat
+  )
   retained <- setdiff(colnames(tm), c("cat", "cat_prob"))
   gini_vec(tm$cat, levels = retained)
 }
@@ -409,23 +413,23 @@ get_hard_class_contingency <- function(
   taxonomy_label,
   chosen_k
 ) {
-  mb_map <- get_track_category_probabilities(
-    P_mb,
+  mb_map_id <- shampoo::assign_genre_categories(
+    mb,
     cat_states_mb,
-    chosen_k
-  )
-  mb_map_id <- add_track_map_to_long(mb, mb_map) |> distinct(track.s.id, cat)
+    chosen_k,
+    method = "hard"
+  ) |> distinct(id, cat)
   cat_wide <- filtered_cat |>
-    dplyr::distinct(track.s.id, tag_name) |>
+    dplyr::distinct(id, tag_name) |>
     dplyr::transmute(
-      track.s.id,
+      id,
       !!paste0(tolower(taxonomy_label), "_cat") := tag_name
     )
 
   dplyr::inner_join(
     cat_wide,
     mb_map_id,
-    by = "track.s.id"
+    by = "id"
   ) |>
     as.data.frame()
 }
