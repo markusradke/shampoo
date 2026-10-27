@@ -415,7 +415,12 @@ get_hard_class_contingency <- function(
     chosen_k
   )
   mb_map_id <- add_track_map_to_long(mb, mb_map) |> distinct(track.s.id, cat)
-  cat_wide <- prepare_single_category_data(filtered_cat, taxonomy_label)
+  cat_wide <- filtered_cat |>
+    dplyr::distinct(track.s.id, tag_name) |>
+    dplyr::transmute(
+      track.s.id,
+      !!paste0(tolower(taxonomy_label), "_cat") := tag_name
+    )
 
   dplyr::inner_join(
     cat_wide,
@@ -424,22 +429,6 @@ get_hard_class_contingency <- function(
   ) |>
     as.data.frame()
 }
-
-prepare_single_category_data <- function(ext_long, taxonomy_label) {
-  tags <- dplyr::distinct(ext_long, track.s.id, tag_name)
-  freq <- dplyr::count(tags, tag_name, name = "n_tracks")
-  tags |>
-    dplyr::left_join(freq, by = "tag_name") |>
-    dplyr::group_by(track.s.id) |>
-    dplyr::arrange(n_tracks, tag_name, .by_group = TRUE) |> # least frequent first, alphabetical tie-break
-    dplyr::slice_head(n = 1) |>
-    dplyr::ungroup() |>
-    dplyr::transmute(
-      track.s.id,
-      !!paste0(tolower(taxonomy_label), "_cat") := tag_name
-    )
-}
-
 
 plot_hard_classes_contingency <- function(
   contingency,

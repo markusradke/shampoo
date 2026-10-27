@@ -55,3 +55,13 @@ filter_artist_prevalence <- function(tags, min_prevalence, message_template) {
     dplyr::filter(n_distinct(track.s.firstartist.id) >= thresh) |>
     dplyr::ungroup()
 }
+
+filter_abs_artist_prevalence <- function(
+  tags,
+  min_abs_prevalence
+) {
+  tags |>
+    dplyr::group_by(tag_name) |>
+    dplyr::filter(n_distinct(track.s.firstartist.id) >= min_abs_prevalence) |>
+    dplyr::ungroup()
+}

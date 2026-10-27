@@ -23,7 +23,8 @@ prepare_musicbrainz_corpus <- function(
   poptrag_selected,
   mb_whitelist_path,
   mb_non_music_tags,
-  min_artist_prev
+  min_artist_prev,
+  min_votes
 ) {
   mb_whitelist <- readRDS(mb_whitelist_path)
   unique_mb_tags <- get_unique_mb_tags(poptrag_selected)
@@ -39,38 +40,34 @@ prepare_musicbrainz_corpus <- function(
     min_prevalence = min_artist_prev,
     message_template = paste0(
       "Unique artists threshold for tags: %d ",
-      "(%.4f in data set)"
-    )
-  ) |>
-    filter_min_votes(
-      n_min_votes = 2
-    )
-  low <- mb_long_tag_denoise |>
-    group_by(track.s.id) |>
-    summarise(v = sum(tag_count)) |>
-    filter(v < 2)
-  message(
-    sprintf(
-      "After removing tags, %d tracks have less than 2 votes (%.2f%% of all tracks).",
-      n = nrow(low),
-      share = 100 * (nrow(low) / n_distinct(mb_long_tag_denoise$track.s.id))
+      "(%.3f in data set)"
     )
   )
+  message(sprintf(
+    "Retained %s tracks and %d tags with MusicBrainz tags after community support denoising.",
+    format(nrow(distinct(mb_long_tag_denoise, track.s.id)), big.mark = ","),
+    nrow(distinct(mb_long_tag_denoise, tag_name))
+  ))
+  mb_long_vote_denoise <- filter_min_votes(
+    mb_long_tag_denoise,
+    n_min_votes = min_votes
+  )
+  message(sprintf(
+    "Retained %s tracks and %d tags with MusicBrainz tags after min.%d votes denoising.",
+    format(nrow(distinct(mb_long_tag_denoise, track.s.id)), big.mark = ","),
+    nrow(distinct(mb_long_tag_denoise, tag_name)),
+    min_votes
+  ))
 
   mb_final <- mb_long_tag_denoise |>
     dplyr::select(-dplyr::matches("genres$"))
-
-  message(sprintf(
-    "Retaind %d MusicBrainz tags after denoising.",
-    nrow(distinct(mb_final, tag_name))
-  ))
   mb_final
 }
 
 prepare_discogs_corpus <- function(
   poptrag_selected,
   mb_final,
-  min_artist_prev
+  min_tracks_per_tag
 ) {
   mb_final_ids <- dplyr::distinct(mb_final, track.s.id)
   dc <- poptrag_selected |>
@@ -84,26 +81,25 @@ prepare_discogs_corpus <- function(
     dplyr::mutate(tag_count = 1L) |>
     dplyr::filter(!tag_name %in% c("Non-Music", "Children's", ""))
 
-  dc_long_tag_denoise <- filter_artist_prevalence(
+  dc_long_tag_denoise <- filter_abs_artist_prevalence(
     dc_long,
-    min_prevalence = min_artist_prev,
-    message_template = paste0(
-      "Unique artists threshold for Discogs tags: %d ",
-      "(%.3f artist-tag combinations in data set)"
-    )
+    min_abs_prevalence = min_tracks_per_tag
   )
   message(sprintf(
     "Retaind %d Discogs tags after denoising.",
     nrow(distinct(dc_long_tag_denoise, tag_name))
   ))
-  dc_long_tag_denoise
+  message("Selecting single tag per track ...")
+  single_tags <- select_single_tag_per_track(dc_long_tag_denoise)
+  print(count(single_tags, tag_name, sort = T), n = 100)
+  single_tags
 }
 
 prepare_deezer_corpus <- function(
   poptrag_selected,
   mb_final,
   dz_non_music_tags,
-  min_artist_prev
+  min_tracks_per_tag
 ) {
   mb_final_ids <- dplyr::distinct(mb_final, track.s.id)
   dz <- poptrag_selected |>
@@ -117,19 +113,33 @@ prepare_deezer_corpus <- function(
     dplyr::mutate(tag_count = 1L) |>
     dplyr::filter(!tag_name %in% dz_non_music_tags)
 
-  dz_long_tag_denoise <- filter_artist_prevalence(
+  dz_long_tag_denoise <- filter_abs_artist_prevalence(
     dz_long,
-    min_prevalence = min_artist_prev,
-    message_template = paste0(
-      "Unique artists threshold for Deezer tags: %d ",
-      "(%.3f artist-tag combinations in data set)"
-    )
+    min_abs_prevalence = min_tracks_per_tag
   )
   message(sprintf(
     "Retaind %d Deezer tags after denoising.",
     nrow(distinct(dz_long_tag_denoise, tag_name))
   ))
-  dz_long_tag_denoise
+  message("Selecting single tag per track ...")
+  single_tags <- select_single_tag_per_track(dz_long_tag_denoise)
+  print(count(single_tags, tag_name, sort = T), n = 100)
+  single_tags
+}
+
+select_single_tag_per_track <- function(tags) {
+  unique_tags <- tags |>
+    dplyr::distinct(track.s.id, tag_name, .keep_all = TRUE)
+  freq <- unique_tags |>
+    dplyr::count(tag_name, name = "n_tracks")
+
+  unique_tags |>
+    dplyr::left_join(freq, by = "tag_name") |>
+    dplyr::group_by(track.s.id) |>
+    dplyr::arrange(n_tracks, tag_name, .by_group = TRUE) |>
+    dplyr::slice_head(n = 1) |>
+    dplyr::ungroup() |>
+    dplyr::select(-n_tracks)
 }
 
 prepare_spotify_corpus <- function(
@@ -524,36 +534,13 @@ filter_min_votes <- function(
   mb_long,
   n_min_votes
 ) {
-  i <- 0
-  while (TRUE) {
-    message(
-      sprintf(
-        "Denoising MusicBrainz tags: iteration %d, votes >= %d",
-        i,
-        n_min_votes
-      )
-    )
-    mb_long_denoise_tracks <- filter_tracks_by_min_votes(
-      mb_long,
-      min_votes = n_min_votes
-    )
-    if (nrow(mb_long_denoise_tracks) == nrow(mb_long)) {
-      break
-    }
-    mb_long <- mb_long_denoise_tracks
-    i <- i + 1
-  }
-  return(mb_long_denoise_tracks)
-}
-
-filter_tracks_by_min_votes <- function(mb_long, min_votes = 2) {
   mb_total_votes <- mb_long |>
     dplyr::group_by(.data$track.s.id) |>
     dplyr::summarize(
       n_votes = sum(.data$tag_count),
       .groups = "drop"
     ) |>
-    dplyr::filter(.data$n_votes >= min_votes) |>
+    dplyr::filter(.data$n_votes >= n_min_votes) |>
     dplyr::select(track.s.id)
 
   mb_long_filtered <- mb_long |>

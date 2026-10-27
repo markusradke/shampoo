@@ -8,7 +8,7 @@ source("analysis/helpers/helpers_prepare_corpora.R")
 # USER SETTINGS ----
 MIN_VOTES <- 2
 MIN_ARTIST_PREV_MODEL <- 0.001
-# MIN_ARTIST_PREV_COMPARISON <- 0.001 # TODO Reimplement; should be a min 100 tracks criterium
+MIN_TRACKS_PER_TAG <- 100
 
 MB_WHITELIST_PATH <- "data-raw/musicbrainz_genre_whitelist_20250616.rds"
 MB_NON_MUSIC_TAGS <- c(
@@ -61,21 +61,23 @@ for (path in file_paths) {
 }
 
 # PREPARE CORPORA ----
-poptrag_selected <- prepare_poptrag_selected("data-raw/poptrag.rds")
+# poptrag_selected <- prepare_poptrag_selected("data-raw/poptrag.rds")
 # saveRDS(poptrag_selected, "data/poptrag_selected.rds")
+poptrag_selected <- readRDS("data/poptrag_selected.rds")
 
 mb_long <- prepare_musicbrainz_corpus(
   poptrag_selected,
   MB_WHITELIST_PATH,
   MB_NON_MUSIC_TAGS,
-  MIN_ARTIST_PREV_MODEL
+  MIN_ARTIST_PREV_MODEL,
+  MIN_VOTES
 )
 save_tags_csv(mb_long, "data/long_data/mb_long.csv")
 
 discogs_long <- prepare_discogs_corpus(
   poptrag_selected,
   mb_long,
-  MIN_ARTIST_PREV_COMPARISON
+  MIN_TRACKS_PER_TAG
 )
 save_tags_csv(discogs_long, "data/long_data/dc_long.csv")
 
@@ -83,7 +85,7 @@ deezer_long <- prepare_deezer_corpus(
   poptrag_selected,
   mb_long,
   DZ_NON_MUSIC_TAGS,
-  MIN_ARTIST_PREV_COMPARISON
+  MIN_TRACKS_PER_TAG
 )
 save_tags_csv(deezer_long, "data/long_data/dz_long.csv")
 
