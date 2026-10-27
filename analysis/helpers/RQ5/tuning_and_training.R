@@ -279,11 +279,12 @@ predict_linear_svm <- function(model, new_data) {
   x_new <- as.matrix(new_data[model$feature_names])
   x_new <- apply_svm_imputer(x_new, model$imputation)
   x_new <- apply_svm_scaler(x_new, model$scaling)
-  predictions <- predict(model$fit, x_new)$predictions
-  factor(
-    model$class_levels[as.integer(predictions)],
-    levels = model$class_levels
-  )
+  decision_values <- predict(
+    model$fit,
+    x_new,
+    decisionValues = TRUE
+  )$decisionValues
+  choose_first_max_class(decision_values, model$class_levels)
 }
 
 objective_lightgbm <- function(trial) {

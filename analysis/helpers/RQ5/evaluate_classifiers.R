@@ -30,10 +30,7 @@ evaluate_lightgbm_model <- function(
   hot_levels <- levels(val_labels_hot_df$cat)
   y_pred_prob <- predict(model, as.matrix(select(val_data, -track.s.id)))
   colnames(y_pred_prob) <- hot_levels
-  y_pred_hot <- apply(y_pred_prob, 1, function(x) {
-    colnames(y_pred_prob)[which.max(x)]
-  }) |>
-    factor(levels = hot_levels)
+  y_pred_hot <- choose_first_max_class(y_pred_prob, hot_levels)
   val_labels_hot <- val_labels_hot_df$cat
   if (mode == "train") {
     return(compute_metrics(
@@ -47,6 +44,16 @@ evaluate_lightgbm_model <- function(
       val_labels_hot_df
     )
   }
+}
+
+choose_first_max_class <- function(scores, class_levels) {
+  if (ncol(scores) != length(class_levels)) {
+    stop("Number of score columns does not match the number of classes.")
+  }
+  factor(
+    class_levels[max.col(scores, ties.method = "first")],
+    levels = class_levels
+  )
 }
 
 evaluate_linear_svm_model <- function(

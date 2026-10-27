@@ -4,12 +4,13 @@ library(readr)
 library(dplyr)
 library(yardstick)
 library(LiblineaR)
-# Assumes that the virtual environment ".venv" has been created in the project folder and the required packages have been installed
-Sys.setenv(
-  # RETICULATE_PYTHON = ".venv/Scripts/python.exe" # Windows
-  RETICULATE_PYTHON = ".venv/bin/python3" # Linux
-)
 library(reticulate)
+
+# Assumes that the virtual environment ".venv" has been created in the project folder and the required packages have been installed
+python_path <- file.path(
+  ".venv",
+  if (.Platform$OS.type == "windows") "Scripts/python.exe" else "bin/python3"
+)
 py_config()
 optuna <- import("optuna")
 

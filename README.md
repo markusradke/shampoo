@@ -114,6 +114,7 @@ Please make sure you have the following R packages installed when running the sc
 - igraph
 - lightgbm
 - LiblineaR
+- tabicl (TabICLv2; installed in the Python virtual environment)
 - Matrix
 - readr
 - reticulate
