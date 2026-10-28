@@ -173,7 +173,7 @@ prepare_spotify_corpus <- function(
     min_prevalence = min_artist_prev,
     message_template = paste0(
       "Unique artists threshold for Spotify tags: %d ",
-      "(%.4f artist-tag combinations in data set)"
+      "(%.2f unique artists in data set)"
     )
   )
   message(sprintf(

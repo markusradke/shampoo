@@ -43,6 +43,9 @@ create_genre_dag <- function(data) {
   dag$tag_matrix <- P
   dag$track_ids <- rownames(P)
   dag$tags <- colnames(P)
+  dag$terminal_nodes <- igraph::V(dag$graph)[
+    igraph::degree(dag$graph, mode = "out") == 0
+  ]$name
   dag
 }
 
@@ -73,6 +76,7 @@ aggregate_genre_categories <- function(
   result$tags <- dag$tags
   result$track_ids <- dag$track_ids
   result$tag_matrix <- dag$tag_matrix
+  result$terminal_nodes <- dag$terminal_nodes
   result
 }
 
@@ -80,8 +84,9 @@ aggregate_genre_categories <- function(
 #'
 #' @param data A data frame with `id`, `tag_name`, and optionally `tag_count`.
 #' @param categories A result from [aggregate_genre_categories()].
-#' @param k One or more numbers of categories to use. Multiple values return a
-#' named list of assignment data frames.
+#' @param k One or more numbers of categories to use. Values below the number
+#' of terminal DAG nodes are clipped to that minimum. Multiple values are made
+#' unique after clipping and return a named list of assignment data frames.
 #' @param method One of `"both"`, `"hard"`, or `"fuzzy"`.
 #' @return One row per track containing category probabilities, assignments,
 #' and `assignment_status`, which is one of `"assigned"`,
@@ -98,7 +103,7 @@ assign_genre_categories <- function(
 ) {
   method <- match.arg(method)
   data <- prepare_long_tag_data(data)
-  validate_assignment_inputs(categories, k)
+  k <- validate_assignment_inputs(categories, k)
   known_tags <- get_category_tags(categories)
   track_info <- prepare_assignment_track_info(data, known_tags)
   P_aligned <- prepare_assignment_matrix(track_info$data, known_tags)
@@ -145,6 +150,25 @@ validate_assignment_inputs <- function(categories, k) {
   ) {
     stop("k must contain available positive integer category counts.")
   }
+  terminal_nodes <- categories$terminal_nodes
+  if (is.null(terminal_nodes)) {
+    terminal_nodes <- categories$final_genres[[length(
+      categories$final_genres
+    )]]
+  }
+  minimum_k <- length(terminal_nodes)
+  clipped_k <- pmax(k, minimum_k)
+  if (any(k < minimum_k)) {
+    warning(
+      sprintf(
+        "Requested k values below the %d terminal node(s) were clipped to %d.",
+        minimum_k,
+        minimum_k
+      ),
+      call. = FALSE
+    )
+  }
+  unique(clipped_k)
 }
 
 get_category_tags <- function(categories) {

@@ -5,7 +5,7 @@ source("analysis/helpers/helpers_prepare_corpora.R")
 
 MIN_VOTES <- 2
 # MIN_ARTIST_PREV_MODEL <- 0.001
-MIN_ARTIST_PREV_MODEL <- 0.01
+MIN_ARTIST_PREV_MODEL <- 0.05 # DEBUG
 MIN_TRACKS_PER_TAG <- 100
 
 MB_WHITELIST_PATH <- "data-raw/musicbrainz_genre_whitelist_20250616.rds"
@@ -90,7 +90,8 @@ save_tags_csv(deezer_long, "data/long_data/dz_long.csv")
 spotify_long <- prepare_spotify_corpus(
   poptrag_selected,
   S_NON_MUSIC_TAGS,
-  0 # Done later with the ML training corpus
+  # 0 # Done later with the ML training corpus
+  0.005 # DEBUG
 )
 save_tags_csv(spotify_long, "data/long_data/s_long.csv")
 

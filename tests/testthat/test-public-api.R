@@ -39,12 +39,18 @@ test_that("assignment returns one row per recognized track in each mode", {
     shampoo::create_genre_dag(input)
   )
 
-  both <- shampoo::assign_genre_categories(input, categories, k = 2)
+  both <- shampoo::assign_genre_categories(
+    input,
+    categories,
+    k = 2,
+    assignment_status = TRUE
+  )
   hard <- shampoo::assign_genre_categories(
     input,
     categories,
     k = 2,
-    method = "hard"
+    method = "hard",
+    assignment_status = TRUE
   )
   fuzzy <- shampoo::assign_genre_categories(
     input,
@@ -65,10 +71,15 @@ test_that("assignment returns one row per recognized track in each mode", {
   expect_false(identical(rownames(both), both$id))
   expect_equal(both$assignment_status, c("assigned", "assigned"))
 
-  multiple <- shampoo::assign_genre_categories(input, categories, k = c(1, 2))
-  expect_named(multiple, c("1", "2"))
-  expect_equal(nrow(multiple[["1"]]), 2)
-  expect_equal(nrow(multiple[["2"]]), 2)
+  expect_warning(
+    multiple <- shampoo::assign_genre_categories(
+      input,
+      categories,
+      k = c(1, 2)
+    ),
+    "below the 2 terminal node"
+  )
+  expect_equal(nrow(multiple), 2)
 })
 
 test_that("unknown tags are reported and ignored", {
@@ -85,7 +96,12 @@ test_that("unknown tags are reported and ignored", {
   )
 
   expect_warning(
-    result <- shampoo::assign_genre_categories(input, categories, k = 2),
+    result <- shampoo::assign_genre_categories(
+      input,
+      categories,
+      k = 2,
+      assignment_status = TRUE
+    ),
     "Ignoring 1 unknown tag"
   )
   expect_equal(result$id, "track-a")
@@ -105,7 +121,8 @@ test_that("tracks without recognized tags receive a status", {
     result <- shampoo::assign_genre_categories(
       data.frame(id = "track-x", tag_name = "unseen"),
       categories,
-      k = 2
+      k = 2,
+      assignment_status = TRUE
     ),
     "Ignoring 1 unknown tag"
   )

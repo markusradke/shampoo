@@ -8,7 +8,8 @@ assign_genre_categories(
   data,
   categories,
   k,
-  method = c("both", "hard", "fuzzy")
+  method = c("both", "hard", "fuzzy"),
+  assignment_status = FALSE
 )
 }
 \arguments{
@@ -16,8 +17,9 @@ assign_genre_categories(
 
 \item{categories}{A result from \code{\link[=aggregate_genre_categories]{aggregate_genre_categories()}}.}
 
-\item{k}{One or more numbers of categories to use. Multiple values return a
-named list of assignment data frames.}
+\item{k}{One or more numbers of categories to use. Values below the number
+of terminal DAG nodes are clipped to that minimum. Multiple values are made
+unique after clipping and return a named list of assignment data frames.}
 
 \item{method}{One of \code{"both"}, \code{"hard"}, or \code{"fuzzy"}.}
 }
