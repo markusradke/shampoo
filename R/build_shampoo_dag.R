@@ -52,7 +52,7 @@ get_tag_dag_from_normalized_votes <- function(P) {
   P_g <- Matrix::colMeans(P)
   eps <- 1e-12
   P_g_smooth <- pmax(P_g, eps) # prevent divide by zero
-  joint_raw <- as.matrix(Matrix::crossprod(P)) / N # P(X, Y)
+  joint_raw <- as.matrix(Matrix::crossprod(P)) / N
   cond_b_given_a <- sweep(joint_raw, 1, P_g_smooth, FUN = "/") # P(B | A) = P(A, B) / P(B), rows correspond to A
   weights <- cond_b_given_a
   diag(weights) <- 0 # so self-loops

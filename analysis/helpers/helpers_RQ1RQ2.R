@@ -6,12 +6,13 @@ plot_gini_genre_categories <- function(cat_states, xlim_max, chosen_ks) {
   ginis <- cat_states$metrics$gini
   g_out_sums <- cat_states$weights[[1]] |> colSums(na.rm = TRUE)
   n_dangling <- length(g_out_sums[g_out_sums == 0])
-
-  xlim_max <- min(length(ginis), xlim_max)
+  metrics <- filter(cat_states$metrics, !is.na(gini))
+  xlim_max <- min(max(metrics$k), xlim_max)
+  metrics <- filter(metrics, k <= xlim_max)
   no_genres <- length(ginis):1 + n_dangling - 1
   ggplot(
-    data.frame(no_genres, gini = ginis),
-    aes(x = no_genres, y = gini)
+    metrics,
+    aes(x = k, y = gini)
   ) +
     geom_line(linewidth = 0.5) +
     geom_point(size = 1.5) +
@@ -64,11 +65,10 @@ plot_gini_genre_categories <- function(cat_states, xlim_max, chosen_ks) {
 plot_gini_genre_categories_full <- function(cat_states) {
   g_out_sums <- cat_states$weights[[1]] |> colSums(na.rm = TRUE)
   n_dangling <- length(g_out_sums[g_out_sums == 0])
-
-  xlim_max <- nrow(cat_states$metrics)
-  # no_genres <- length(ginis):1 + n_dangling - 1
+  metrics <- filter(cat_states$metrics, !is.na(gini))
+  xlim_max <- max(metrics$k)
   ggplot(
-    cat_states$metrics,
+    metrics,
     aes(x = k, y = gini)
   ) +
     geom_line(linewidth = 0.5) +
@@ -163,8 +163,11 @@ plot_one_hot_acc_trajectory <- function(
   cat_states,
   xlim_max
 ) {
+  metrics <- cat_states$metrics |>
+    filter(!is.na(onehot_acc) & k <= xlim_max)
+  xlim_max <- min(max(metrics$k), xlim_max)
   ggplot(
-    cat_states$metrics,
+    metrics,
     aes(x = k, y = onehot_acc)
   ) +
     geom_line(linewidth = 0.5) +
@@ -214,7 +217,9 @@ plot_full_one_hot_acc_trajectory <- function(
   cat_states,
   P
 ) {
-  xlim_max <- nrow(cat_states$metrics)
+  metrics <- cat_states$metrics |>
+    filter(!is.na(onehot_acc))
+  xlim_max <- max(metrics$k)
   ggplot(
     cat_states$metrics,
     aes(x = k, y = onehot_acc)

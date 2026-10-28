@@ -95,10 +95,12 @@ get_genre_categories_from_graph <- function(
         track_mapping[affected, parents, drop = FALSE] +
         outer(track_mapping[affected, genre], parent_weights)
       track_mapping[affected, genre] <- 0
-      winners[affected] <- calculate_winners(
-        track_mapping[affected, , drop = FALSE],
+      # folded genres have zero shares and cannot win
+      remaining_genres <- setdiff(active_genres, genre)
+      winners[affected] <- remaining_genres[calculate_winners(
+        track_mapping[affected, remaining_genres, drop = FALSE],
         tiebreak_order
-      )
+      )]
     }
     mapping <- fold_genre_rows(mapping, genre, parents, parent_weights)
     weights <- fold_genre_rows(weights, genre, parents, parent_weights)
