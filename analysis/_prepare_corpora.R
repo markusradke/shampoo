@@ -4,8 +4,7 @@ library(ggplot2)
 source("analysis/helpers/helpers_prepare_corpora.R")
 
 MIN_VOTES <- 2
-# MIN_ARTIST_PREV_MODEL <- 0.001
-MIN_ARTIST_PREV_MODEL <- 0.05 # DEBUG
+MIN_ARTIST_PREV_MODEL <- 0.001
 MIN_TRACKS_PER_TAG <- 100
 
 MB_WHITELIST_PATH <- "data-raw/musicbrainz_genre_whitelist_20250616.rds"

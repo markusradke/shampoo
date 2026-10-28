@@ -1,3 +1,6 @@
+# use data.table semantics for data.tables inside the package
+.datatable.aware <- TRUE
+
 prepare_long_tag_data <- function(data) {
   required <- c("id", "tag_name")
   missing <- setdiff(required, names(data))
@@ -7,16 +10,17 @@ prepare_long_tag_data <- function(data) {
       paste(missing, collapse = ", ")
     ))
   }
-  if ("tag_count" %in% names(data)) {
-    if (
-      !is.numeric(data$tag_count) ||
-        any(!is.finite(data$tag_count)) ||
-        any(data$tag_count < 0)
-    ) {
-      stop("tag_count must contain finite, non-negative numeric values.")
-    }
-  } else {
+  data <- data.table::as.data.table(
+    as.list(data)[intersect(c(required, "tag_count"), names(data))]
+  )
+  if (is.null(data$tag_count)) {
     data$tag_count <- 1
+  } else if (
+    !is.numeric(data$tag_count) ||
+      any(!is.finite(data$tag_count)) ||
+      any(data$tag_count < 0)
+  ) {
+    stop("tag_count must contain finite, non-negative numeric values.")
   }
   if (
     any(is.na(data$id)) ||
@@ -25,10 +29,10 @@ prepare_long_tag_data <- function(data) {
   ) {
     stop("id and tag_name must not contain missing or empty values.")
   }
-  if (any(duplicated(data[c("id", "tag_name")]))) {
+  if (anyDuplicated(data, by = required) > 0L) {
     stop("Input contains duplicate id/tag_name combinations.")
   }
-  data.table::as.data.table(data)
+  data
 }
 
 #' Create a genre DAG from long-format track tags.
@@ -37,15 +41,12 @@ prepare_long_tag_data <- function(data) {
 #' @return A genre DAG object containing the graph, tag matrix, and metadata.
 #' @export
 create_genre_dag <- function(data) {
-  data <- prepare_long_tag_data(data)
-  P <- get_normalized_wide_vote_matrix(data)
+  P <- get_normalized_vote_matrix(prepare_long_tag_data(data))
   dag <- get_tag_dag_from_normalized_votes(P)
-  dag$tag_matrix <- P
+  dag$tag_matrix <- as.matrix(P)
   dag$track_ids <- rownames(P)
   dag$tags <- colnames(P)
-  dag$terminal_nodes <- igraph::V(dag$graph)[
-    igraph::degree(dag$graph, mode = "out") == 0
-  ]$name
+  dag$terminal_nodes <- get_terminal_nodes(dag$graph)
   dag
 }
 
@@ -69,27 +70,28 @@ aggregate_genre_categories <- function(
   if (is.null(dag$tag_matrix) || is.null(dag$graph)) {
     stop("dag must be returned by create_genre_dag().")
   }
-  all_genres <- dag$tags
-  dag_terminal_nodes <- dag$terminal_nodes
-  if (is.null(dag_terminal_nodes)) {
-    dag_terminal_nodes <- igraph::V(dag$graph)[
-      igraph::degree(dag$graph, mode = "out") == 0
-    ]$name
+  terminal_nodes <- dag$terminal_nodes
+  if (is.null(terminal_nodes)) {
+    terminal_nodes <- get_terminal_nodes(dag$graph)
   }
   if (!is.null(target_set)) {
-    if (!is.character(target_set) || length(target_set) == 0L ||
-        anyNA(target_set) || any(!nzchar(target_set))) {
+    if (
+      !is.character(target_set) ||
+        length(target_set) == 0L ||
+        anyNA(target_set) ||
+        any(!nzchar(target_set))
+    ) {
       stop("target_set must be a non-empty character vector of genre tags.")
     }
     target_set <- unique(target_set)
-    missing_genres <- setdiff(target_set, all_genres)
+    missing_genres <- setdiff(target_set, dag$tags)
     if (length(missing_genres) > 0L) {
       stop(sprintf(
         "target_set contains genre tag(s) not present in the DAG: %s.",
         paste(missing_genres, collapse = ", ")
       ))
     }
-    missing_terminals <- setdiff(dag_terminal_nodes, target_set)
+    missing_terminals <- setdiff(terminal_nodes, target_set)
     if (length(missing_terminals) > 0L) {
       warning(
         sprintf(
@@ -103,7 +105,8 @@ aggregate_genre_categories <- function(
     if (!is.null(processing_order)) {
       stop("Specify either target_set or processing_order, not both.")
     }
-    processing_order <- setdiff(all_genres, target_set)
+    processing_order <- setdiff(dag$tags, target_set)
+    terminal_nodes <- target_set
   }
   result <- get_genre_categories_from_graph(
     dag,
@@ -111,17 +114,13 @@ aggregate_genre_categories <- function(
     lambda = lambda,
     processing_order = processing_order,
     fast = fast,
-    terminal_nodes = target_set
+    terminal_nodes = terminal_nodes
   )
   result$tags <- dag$tags
   result$track_ids <- dag$track_ids
   result$tag_matrix <- dag$tag_matrix
-  result$terminal_nodes <- if (is.null(target_set)) {
-    dag_terminal_nodes
-  } else {
-    target_set
-  }
-  result$target_set <- if (is.null(target_set)) NULL else target_set
+  result$terminal_nodes <- terminal_nodes
+  result$target_set <- target_set
   result
 }
 
@@ -154,34 +153,27 @@ assign_genre_categories <- function(
   k <- validate_assignment_inputs(categories, k, k_supplied = !missing(k))
   known_tags <- get_category_tags(categories)
   track_info <- prepare_assignment_track_info(data, known_tags)
-  P_aligned <- prepare_assignment_matrix(track_info$data, known_tags)
-  tiebreak_order <- get_assignment_tiebreak_order(P_aligned, known_tags)
+  P <- get_normalized_vote_matrix(track_info$data, known_tags)
+  tiebreak_order <- get_tag_name_ranks_for_size_tiebreaking(P)
 
   assignments <- lapply(k, function(chosen_k) {
-    probabilities <- calculate_assignment_probabilities(
-      P_aligned,
+    probabilities <- get_track_category_probabilities(
+      P,
       categories,
       chosen_k,
       tiebreak_order,
       include_probabilities = method != "hard"
     )
-    probabilities <- complete_assignment_rows(
-      probabilities,
-      track_info$ids
-    )
+    probabilities <- complete_assignment_rows(probabilities, track_info$ids)
     if (assignment_status) {
       probabilities$assignment_status <- get_assignment_status(
         probabilities$id,
         track_info
       )
     }
-    format_assignment_output(probabilities, method, assignment_status)
+    format_assignment_output(probabilities, method)
   })
   names(assignments) <- as.character(k)
-  assignments <- lapply(assignments, function(result) {
-    rownames(result) <- NULL
-    result
-  })
   if (length(assignments) == 1L) assignments[[1L]] else assignments
 }
 
@@ -229,188 +221,4 @@ validate_assignment_inputs <- function(categories, k, k_supplied = TRUE) {
     )
   }
   unique(clipped_k)
-}
-
-get_category_tags <- function(categories) {
-  tags <- categories$tags
-  if (is.null(tags)) {
-    tags <- colnames(categories$mappings[[1]])
-  }
-  tags
-}
-
-prepare_assignment_track_info <- function(data, known_tags) {
-  ids <- unique(as.character(data$id))
-  input_tags <- as.character(data$tag_name)
-  unknown_tags <- setdiff(unique(input_tags), known_tags)
-  unknown_by_id <- tapply(
-    input_tags %in% unknown_tags,
-    as.character(data$id),
-    any
-  )
-
-  if (length(unknown_tags) > 0L) {
-    warning(
-      sprintf(
-        "Ignoring %d unknown tag(s): %s",
-        length(unknown_tags),
-        if (length(unknown_tags) < 50L) {
-          paste(unknown_tags, collapse = ", ")
-        } else {
-          "list suppressed because there are 50 or more"
-        }
-      ),
-      call. = FALSE
-    )
-  }
-
-  recognized_data <- data[data$tag_name %in% known_tags, , drop = FALSE]
-  list(
-    data = recognized_data,
-    ids = ids,
-    recognized_ids = unique(as.character(recognized_data$id)),
-    unknown_by_id = unknown_by_id
-  )
-}
-
-prepare_assignment_matrix <- function(data, known_tags) {
-  P <- if (nrow(data) > 0L) {
-    Matrix::Matrix(get_normalized_wide_vote_matrix(data), sparse = TRUE)
-  } else {
-    Matrix::sparseMatrix(
-      i = integer(),
-      j = integer(),
-      dims = c(0L, length(known_tags)),
-      dimnames = list(character(), known_tags)
-    )
-  }
-  aligned <- Matrix::sparseMatrix(
-    i = integer(),
-    j = integer(),
-    x = numeric(),
-    dims = c(nrow(P), length(known_tags)),
-    dimnames = list(rownames(P), known_tags)
-  )
-  if (nrow(P) > 0L) {
-    shared_tags <- intersect(colnames(P), known_tags)
-    source_columns <- match(shared_tags, colnames(P))
-    target_columns <- match(shared_tags, known_tags)
-    entries <- Matrix::summary(P[, source_columns, drop = FALSE])
-    aligned <- Matrix::sparseMatrix(
-      i = entries$i,
-      j = target_columns[entries$j],
-      x = entries$x,
-      dims = c(nrow(P), length(known_tags)),
-      dimnames = list(rownames(P), known_tags)
-    )
-  }
-  aligned
-}
-
-get_assignment_tiebreak_order <- function(P, known_tags) {
-  if (nrow(P) > 0L) {
-    return(get_tag_name_ranks_for_size_tiebreaking(P))
-  }
-  stats::setNames(seq_along(known_tags), known_tags)
-}
-
-calculate_assignment_probabilities <- function(
-  P,
-  categories,
-  chosen_k,
-  tiebreak_order,
-  include_probabilities = TRUE
-) {
-  if (nrow(P) > 0L) {
-    result <- get_track_category_probabilities(
-      P,
-      categories,
-      chosen_k = chosen_k,
-      tiebreak_order = tiebreak_order,
-      include_probabilities = include_probabilities
-    )
-    rownames(result) <- rownames(P)
-    return(result)
-  }
-  final_genres <- categories$final_genres[[
-    nrow(categories$mappings[[1]]) - chosen_k + 1L
-  ]]
-  empty <- as.data.frame(setNames(
-    replicate(length(final_genres), numeric(), simplify = FALSE),
-    final_genres
-  ))
-  empty$cat <- character()
-  empty$cat_prob <- numeric()
-  empty
-}
-
-complete_assignment_rows <- function(probabilities, ids) {
-  probabilities$id <- rownames(probabilities)
-  missing_ids <- setdiff(ids, probabilities$id)
-  if (length(missing_ids) > 0L) {
-    missing_rows <- as.data.frame(
-      lapply(probabilities, function(column) {
-        if (is.numeric(column)) {
-          rep(NA_real_, length(missing_ids))
-        } else {
-          rep(NA_character_, length(missing_ids))
-        }
-      }),
-      stringsAsFactors = FALSE
-    )
-    missing_rows$id <- missing_ids
-    probabilities <- rbind(probabilities, missing_rows)
-  }
-  probabilities <- probabilities[match(ids, probabilities$id), , drop = FALSE]
-  probabilities[, c("id", setdiff(names(probabilities), "id"))]
-}
-
-get_assignment_status <- function(ids, track_info) {
-  recognized_lookup <- stats::setNames(
-    rep(TRUE, length(track_info$recognized_ids)),
-    track_info$recognized_ids
-  )
-  vapply(
-    ids,
-    function(track_id) {
-      has_unknown <- isTRUE(track_info$unknown_by_id[[track_id]])
-      has_recognized <- isTRUE(recognized_lookup[track_id])
-      if (!has_recognized) {
-        "no_recognized_tags"
-      } else if (has_unknown) {
-        "partial_unknown_tags"
-      } else {
-        "assigned"
-      }
-    },
-    character(1)
-  )
-}
-
-format_assignment_output <- function(probabilities, method, assignment_status) {
-  if (method == "hard") {
-    if (assignment_status) {
-      return(probabilities[c("id", "cat", "cat_prob", "assignment_status")])
-    } else {
-      return(probabilities[c("id", "cat", "cat_prob")])
-    }
-  }
-  if (method == "fuzzy") {
-    if (assignment_status) {
-      return(probabilities[c(
-        "id",
-        setdiff(
-          names(probabilities),
-          c("cat", "cat_prob", "assignment_status")
-        ),
-        "assignment_status"
-      )])
-    } else {
-      return(probabilities[c(
-        "id",
-        setdiff(names(probabilities), c("cat", "cat_prob", "assignment_status"))
-      )])
-    }
-  }
-  probabilities
 }

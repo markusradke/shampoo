@@ -33,7 +33,7 @@ make_long_genre_data <- function() {
 }
 
 make_normalized_votes <- function() {
-  shampoo:::get_normalized_wide_vote_matrix(make_long_genre_data())
+  as.matrix(shampoo:::get_normalized_vote_matrix(make_long_genre_data()))
 }
 
 make_hierarchy <- function() {
@@ -203,9 +203,7 @@ test_that("automatic category extraction and fast fixed-order extraction are rep
     fast = TRUE
   )
 
-  expect_length(automatic$processing_order, 3)
-  expect_length(unique(automatic$processing_order), 2)
-  expect_true(all(automatic$processing_order %in% colnames(normalized_votes)))
+  expect_setequal(automatic$processing_order, fixed_order)
   expect_equal(fast$processing_order, fixed_order)
   expect_length(fast$sizes, 0)
   expect_null(fast$metrics)
@@ -297,26 +295,6 @@ test_that("track category probabilities resolves ties using tag prevalence", {
   expect_equal(result$cat_prob, c(0.5, 1, 1, 1))
 })
 
-test_that("long genre data receives the track-level mapping", {
-  long_data <- make_long_genre_data()
-  track_map <- data.frame(
-    cat = rep(c("rock", "electronic", "classical"), each = 2),
-    cat_prob = rep(c(0.75, 2 / 3, 0.8), each = 2),
-    stringsAsFactors = FALSE
-  )
-  track_map$rock <- track_map$cat == "rock"
-
-  mapped <- shampoo:::add_track_map_to_long(long_data, track_map)
-
-  expect_equal(nrow(mapped), nrow(long_data))
-  expect_true(all(c("cat", "cat_prob", "rock") %in% names(mapped)))
-  expect_equal(
-    mapped$cat_prob[match(1:6, mapped$id)],
-    c(0.75, 0.75, 2 / 3, 2 / 3, 0.8, 0.8)
-  )
-  expect_equal(mapped$tag_count, long_data$tag_count)
-})
-
 test_that("size tie-breaking ranks less prevalent tags first", {
   normalized_votes <- make_normalized_votes()
 
@@ -326,7 +304,7 @@ test_that("size tie-breaking ranks less prevalent tags first", {
   expect_equal(unname(ranks), c(2, 2, 2, 4))
 })
 
-test_that("size calculation counts dominant tags and includes zero-sized tags", {
+test_that("winners are dominant tags with ties won by the first-ranked tag", {
   track_mapping <- matrix(
     c(0.8, 0.2, 0, 0.5, 0.5, 0, 0.1, 0.9, 0, 0.1, 0.9, 0),
     nrow = 4,
@@ -335,25 +313,7 @@ test_that("size calculation counts dominant tags and includes zero-sized tags", 
   )
   tiebreak_order <- c(beta = 1, alpha = 2, gamma = 3)
 
-  sizes <- shampoo:::calculate_sizes_from_track_mapping(
-    track_mapping,
-    tiebreak_order
-  )
+  winners <- shampoo:::calculate_winners(track_mapping, tiebreak_order)
 
-  expect_equal(sizes, c(alpha = 1, beta = 3, gamma = 0))
-})
-
-test_that("one-hot accuracy uses fixed full-distribution expected labels", {
-  track_mapping <- matrix(
-    c(0, 1, 0),
-    nrow = 1,
-    dimnames = list(NULL, c("a", "b", "c"))
-  )
-  accuracy <- shampoo:::calculate_one_hot_accuracy(
-    track_mapping = track_mapping,
-    tiebreak_order = c(a = 1, b = 2, c = 3),
-    baseline_winners = 1
-  )
-
-  expect_equal(accuracy, 0)
+  expect_equal(winners, c(1, 2, 2, 2))
 })

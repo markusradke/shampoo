@@ -14,7 +14,7 @@ save_tags_csv <- function(tags, path) {
   readr::write_csv(tags, path)
   message(sprintf(
     "Saved N=%s tracks with their tags in long format to %s",
-    format(nrow(distinct(tags, track.s.id)), big.mark = ","),
+    format(nrow(distinct(tags, id)), big.mark = ","),
     path
   ))
 }
