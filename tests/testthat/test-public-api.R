@@ -9,11 +9,14 @@ test_that("public API uses id and defaults tag_count", {
   expect_equal(dag$track_ids, c("track-a", "track-b"))
   expect_equal(colnames(dag$tag_matrix), c("pop", "rock"))
   expect_equal(unname(rowSums(dag$tag_matrix)), c(1, 1))
-  expect_equal(getNamespaceExports("shampoo"), c(
-    "assign_genre_categories",
-    "aggregate_genre_categories",
-    "create_genre_dag"
-  ))
+  expect_equal(
+    getNamespaceExports("shampoo"),
+    c(
+      "assign_genre_categories",
+      "aggregate_genre_categories",
+      "create_genre_dag"
+    )
+  )
 })
 
 test_that("public API rejects duplicate id/tag rows", {
@@ -42,15 +45,13 @@ test_that("assignment returns one row per recognized track in each mode", {
   both <- shampoo::assign_genre_categories(
     input,
     categories,
-    k = 2,
-    assignment_status = TRUE
+    k = 2
   )
   hard <- shampoo::assign_genre_categories(
     input,
     categories,
     k = 2,
-    method = "hard",
-    assignment_status = TRUE
+    method = "hard"
   )
   fuzzy <- shampoo::assign_genre_categories(
     input,
@@ -99,8 +100,7 @@ test_that("unknown tags are reported and ignored", {
     result <- shampoo::assign_genre_categories(
       input,
       categories,
-      k = 2,
-      assignment_status = TRUE
+      k = 2
     ),
     "Ignoring 1 unknown tag"
   )
@@ -121,8 +121,7 @@ test_that("tracks without recognized tags receive a status", {
     result <- shampoo::assign_genre_categories(
       data.frame(id = "track-x", tag_name = "unseen"),
       categories,
-      k = 2,
-      assignment_status = TRUE
+      k = 2
     ),
     "Ignoring 1 unknown tag"
   )

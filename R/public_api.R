@@ -145,8 +145,7 @@ assign_genre_categories <- function(
   data,
   categories,
   k = NULL,
-  method = c("both", "hard", "fuzzy"),
-  assignment_status = FALSE
+  method = c("both", "hard", "fuzzy")
 ) {
   method <- match.arg(method)
   data <- prepare_long_tag_data(data)
@@ -165,60 +164,12 @@ assign_genre_categories <- function(
       include_probabilities = method != "hard"
     )
     probabilities <- complete_assignment_rows(probabilities, track_info$ids)
-    if (assignment_status) {
-      probabilities$assignment_status <- get_assignment_status(
-        probabilities$id,
-        track_info
-      )
-    }
+    probabilities$assignment_status <- get_assignment_status(
+      probabilities$id,
+      track_info
+    )
     format_assignment_output(probabilities, method)
   })
   names(assignments) <- as.character(k)
   if (length(assignments) == 1L) assignments[[1L]] else assignments
-}
-
-validate_assignment_inputs <- function(categories, k, k_supplied = TRUE) {
-  if (is.null(categories$mappings) || is.null(categories$final_genres)) {
-    stop("categories must be returned by aggregate_genre_categories().")
-  }
-  if (!is.null(categories$target_set)) {
-    target_k <- length(categories$target_set)
-    if (k_supplied) {
-      warning(
-        sprintf(
-          "k was ignored because this category object uses target_set; using k = %d.",
-          target_k
-        )
-      )
-    }
-    return(target_k)
-  }
-  if (
-    !is.numeric(k) ||
-      any(!is.finite(k)) ||
-      any(k != as.integer(k)) ||
-      any(k < 1L) ||
-      any(k > nrow(categories$mappings[[1]]))
-  ) {
-    stop("k must contain available positive integer category counts.")
-  }
-  terminal_nodes <- categories$terminal_nodes
-  if (is.null(terminal_nodes)) {
-    terminal_nodes <- categories$final_genres[[length(
-      categories$final_genres
-    )]]
-  }
-  minimum_k <- length(terminal_nodes)
-  clipped_k <- pmax(k, minimum_k)
-  if (any(k < minimum_k)) {
-    warning(
-      sprintf(
-        "Requested k values below the %d terminal node(s) were clipped to %d.",
-        minimum_k,
-        minimum_k
-      ),
-      call. = FALSE
-    )
-  }
-  unique(clipped_k)
 }

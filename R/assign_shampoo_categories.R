@@ -1,3 +1,50 @@
+validate_assignment_inputs <- function(categories, k, k_supplied = TRUE) {
+  if (is.null(categories$mappings) || is.null(categories$final_genres)) {
+    stop("categories must be returned by aggregate_genre_categories().")
+  }
+  if (!is.null(categories$target_set)) {
+    target_k <- length(categories$target_set)
+    if (k_supplied) {
+      warning(
+        sprintf(
+          "k was ignored because this category object uses target_set; using k = %d.",
+          target_k
+        )
+      )
+    }
+    return(target_k)
+  }
+  if (
+    !is.numeric(k) ||
+      any(!is.finite(k)) ||
+      any(k != as.integer(k)) ||
+      any(k < 1L) ||
+      any(k > nrow(categories$mappings[[1]]))
+  ) {
+    stop("k must contain available positive integer category counts.")
+  }
+  terminal_nodes <- categories$terminal_nodes
+  if (is.null(terminal_nodes)) {
+    terminal_nodes <- categories$final_genres[[length(
+      categories$final_genres
+    )]]
+  }
+  minimum_k <- length(terminal_nodes)
+  clipped_k <- pmax(k, minimum_k)
+  if (any(k < minimum_k)) {
+    warning(
+      sprintf(
+        "Requested k values below the %d terminal node(s) were clipped to %d.",
+        minimum_k,
+        minimum_k
+      ),
+      call. = FALSE
+    )
+  }
+  unique(clipped_k)
+}
+
+
 get_track_category_probabilities <- function(
   P,
   res_list,
