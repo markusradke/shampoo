@@ -55,28 +55,73 @@ create_genre_dag <- function(data) {
 #' @param lambda Weight of tag generality when selecting the processing order.
 #' @param processing_order Optional explicit tag processing order.
 #' @param fast Whether to skip state metrics when an explicit order is supplied.
+#' @param target_set Optional character vector of final genre tags. All genres
+#' outside this set are processed, and target tags are treated as terminal.
 #' @return Category state history, including the reusable normalized tag matrix.
 #' @export
 aggregate_genre_categories <- function(
   dag,
   lambda = 0.5,
   processing_order = NULL,
-  fast = FALSE
+  fast = FALSE,
+  target_set = NULL
 ) {
   if (is.null(dag$tag_matrix) || is.null(dag$graph)) {
     stop("dag must be returned by create_genre_dag().")
+  }
+  all_genres <- dag$tags
+  dag_terminal_nodes <- dag$terminal_nodes
+  if (is.null(dag_terminal_nodes)) {
+    dag_terminal_nodes <- igraph::V(dag$graph)[
+      igraph::degree(dag$graph, mode = "out") == 0
+    ]$name
+  }
+  if (!is.null(target_set)) {
+    if (!is.character(target_set) || length(target_set) == 0L ||
+        anyNA(target_set) || any(!nzchar(target_set))) {
+      stop("target_set must be a non-empty character vector of genre tags.")
+    }
+    target_set <- unique(target_set)
+    missing_genres <- setdiff(target_set, all_genres)
+    if (length(missing_genres) > 0L) {
+      stop(sprintf(
+        "target_set contains genre tag(s) not present in the DAG: %s.",
+        paste(missing_genres, collapse = ", ")
+      ))
+    }
+    missing_terminals <- setdiff(dag_terminal_nodes, target_set)
+    if (length(missing_terminals) > 0L) {
+      warning(
+        sprintf(
+          "Adding terminal genre tag(s) to target_set: %s.",
+          paste(missing_terminals, collapse = ", ")
+        ),
+        call. = FALSE
+      )
+      target_set <- c(target_set, missing_terminals)
+    }
+    if (!is.null(processing_order)) {
+      stop("Specify either target_set or processing_order, not both.")
+    }
+    processing_order <- setdiff(all_genres, target_set)
   }
   result <- get_genre_categories_from_graph(
     dag,
     dag$tag_matrix,
     lambda = lambda,
     processing_order = processing_order,
-    fast = fast
+    fast = fast,
+    terminal_nodes = target_set
   )
   result$tags <- dag$tags
   result$track_ids <- dag$track_ids
   result$tag_matrix <- dag$tag_matrix
-  result$terminal_nodes <- dag$terminal_nodes
+  result$terminal_nodes <- if (is.null(target_set)) {
+    dag_terminal_nodes
+  } else {
+    target_set
+  }
+  result$target_set <- if (is.null(target_set)) NULL else target_set
   result
 }
 
@@ -84,9 +129,12 @@ aggregate_genre_categories <- function(
 #'
 #' @param data A data frame with `id`, `tag_name`, and optionally `tag_count`.
 #' @param categories A result from [aggregate_genre_categories()].
-#' @param k One or more numbers of categories to use. Values below the number
-#' of terminal DAG nodes are clipped to that minimum. Multiple values are made
-#' unique after clipping and return a named list of assignment data frames.
+#' @param k One or more numbers of categories to use. For categories created
+#' with `target_set`, this argument is ignored and the target-set size is used.
+#' A warning is printed when `k` is supplied in that case. Otherwise, values
+#' below the number of terminal DAG nodes are clipped to that minimum.
+#' Multiple values are made unique after clipping and return a named list of
+#' assignment data frames.
 #' @param method One of `"both"`, `"hard"`, or `"fuzzy"`.
 #' @return One row per track containing category probabilities, assignments,
 #' and `assignment_status`, which is one of `"assigned"`,
@@ -97,13 +145,13 @@ aggregate_genre_categories <- function(
 assign_genre_categories <- function(
   data,
   categories,
-  k,
+  k = NULL,
   method = c("both", "hard", "fuzzy"),
   assignment_status = FALSE
 ) {
   method <- match.arg(method)
   data <- prepare_long_tag_data(data)
-  k <- validate_assignment_inputs(categories, k)
+  k <- validate_assignment_inputs(categories, k, k_supplied = !missing(k))
   known_tags <- get_category_tags(categories)
   track_info <- prepare_assignment_track_info(data, known_tags)
   P_aligned <- prepare_assignment_matrix(track_info$data, known_tags)
@@ -137,9 +185,21 @@ assign_genre_categories <- function(
   if (length(assignments) == 1L) assignments[[1L]] else assignments
 }
 
-validate_assignment_inputs <- function(categories, k) {
+validate_assignment_inputs <- function(categories, k, k_supplied = TRUE) {
   if (is.null(categories$mappings) || is.null(categories$final_genres)) {
     stop("categories must be returned by aggregate_genre_categories().")
+  }
+  if (!is.null(categories$target_set)) {
+    target_k <- length(categories$target_set)
+    if (k_supplied) {
+      warning(
+        sprintf(
+          "k was ignored because this category object uses target_set; using k = %d.",
+          target_k
+        )
+      )
+    }
+    return(target_k)
   }
   if (
     !is.numeric(k) ||

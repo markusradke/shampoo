@@ -8,7 +8,8 @@ aggregate_genre_categories(
   dag,
   lambda = 0.5,
   processing_order = NULL,
-  fast = FALSE
+  fast = FALSE,
+  target_set = NULL
 )
 }
 \arguments{
@@ -19,6 +20,9 @@ aggregate_genre_categories(
 \item{processing_order}{Optional explicit tag processing order.}
 
 \item{fast}{Whether to skip state metrics when an explicit order is supplied.}
+
+\item{target_set}{Optional character vector of final genre tags. All genres
+outside this set are processed, and target tags are treated as terminal.}
 }
 \value{
 Category state history, including the reusable normalized tag matrix.

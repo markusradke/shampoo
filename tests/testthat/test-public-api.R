@@ -130,3 +130,28 @@ test_that("tracks without recognized tags receive a status", {
   expect_equal(result$assignment_status, "no_recognized_tags")
   expect_true(is.na(result$cat))
 })
+
+test_that("target-set categories always use their target granularity", {
+  input <- data.frame(
+    id = c("track-a", "track-a", "track-b", "track-b"),
+    tag_name = c("rock", "pop", "rock", "pop")
+  )
+  dag <- shampoo::create_genre_dag(input)
+  expect_warning(
+    categories <- shampoo::aggregate_genre_categories(
+      dag,
+      target_set = "pop"
+    ),
+    "Adding terminal genre"
+  )
+
+  expect_warning(
+    result_with_k <- shampoo::assign_genre_categories(input, categories, k = 1),
+    "k was ignored.*using k = 2"
+  )
+  expect_silent(
+    result <- shampoo::assign_genre_categories(input, categories)
+  )
+  expect_equal(nrow(result), 2)
+  expect_equal(result_with_k, result)
+})

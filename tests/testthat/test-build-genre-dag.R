@@ -142,6 +142,44 @@ test_that("category extraction returns a complete fixed-order state history", {
   expect_equal(extraction$metrics$onehot_acc, c(1, 2 / 3, 1 / 2, 1 / 6))
 })
 
+test_that("target sets define terminal categories and processing order", {
+  normalized_votes <- make_normalized_votes()
+  dag <- shampoo::create_genre_dag(make_long_genre_data())
+  expect_warning(
+    categories <- shampoo::aggregate_genre_categories(
+      dag,
+      target_set = c("classical")
+    ),
+    "Adding terminal genre tag"
+  )
+
+  expect_equal(
+    categories$processing_order,
+    setdiff(categories$tags, c("pop", "classical"))
+  )
+  expect_setequal(categories$terminal_nodes, c("pop", "classical"))
+  expect_equal(categories$target_set, c("classical", "pop"))
+  expect_setequal(
+    categories$final_genres[[length(categories$final_genres)]],
+    c("pop", "classical")
+  )
+  expect_error(
+    shampoo::aggregate_genre_categories(
+      dag,
+      target_set = c("pop", "missing")
+    ),
+    "not present in the DAG"
+  )
+  expect_error(
+    shampoo::aggregate_genre_categories(
+      dag,
+      processing_order = "rock",
+      target_set = "pop"
+    ),
+    "either target_set or processing_order"
+  )
+})
+
 test_that("automatic category extraction and fast fixed-order extraction are reproducible", {
   normalized_votes <- make_normalized_votes()
   hierarchy <- make_hierarchy()

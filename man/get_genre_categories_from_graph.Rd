@@ -9,7 +9,8 @@ get_genre_categories_from_graph(
   P,
   lambda = 0.5,
   processing_order = NULL,
-  fast = FALSE
+  fast = FALSE,
+  terminal_nodes = NULL
 )
 }
 \arguments{

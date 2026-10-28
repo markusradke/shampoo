@@ -7,7 +7,7 @@
 assign_genre_categories(
   data,
   categories,
-  k,
+  k = NULL,
   method = c("both", "hard", "fuzzy"),
   assignment_status = FALSE
 )
@@ -17,9 +17,12 @@ assign_genre_categories(
 
 \item{categories}{A result from \code{\link[=aggregate_genre_categories]{aggregate_genre_categories()}}.}
 
-\item{k}{One or more numbers of categories to use. Values below the number
-of terminal DAG nodes are clipped to that minimum. Multiple values are made
-unique after clipping and return a named list of assignment data frames.}
+\item{k}{One or more numbers of categories to use. For categories created
+with \code{target_set}, this argument is ignored and the target-set size is used.
+A warning is printed when \code{k} is supplied in that case. Otherwise, values
+below the number of terminal DAG nodes are clipped to that minimum.
+Multiple values are made unique after clipping and return a named list of
+assignment data frames.}
 
 \item{method}{One of \code{"both"}, \code{"hard"}, or \code{"fuzzy"}.}
 }
