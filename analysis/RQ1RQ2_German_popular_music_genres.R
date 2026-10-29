@@ -17,6 +17,10 @@ saveRDS(
   cat_states,
   sprintf("models/dag/cat_states_full_%d-lambda.rds", round(LAMBDA * 100))
 )
+cat_states <- readRDS(sprintf(
+  "models/dag/cat_states_full_%d-lambda.rds",
+  round(LAMBDA * 100)
+))
 
 # RQ1 OPTIMAL GRANULARITIES ----
 plot_gini_genre_categories(cat_states, 50, CHOSEN_KS)
