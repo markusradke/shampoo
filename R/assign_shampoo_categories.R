@@ -78,11 +78,7 @@ get_track_category_probabilities <- function(
   if (is.null(tiebreak_order)) {
     tiebreak_order <- get_tag_name_ranks_for_size_tiebreaking(P)
   }
-  state <- n_tags - chosen_k + 1
-  final_genres <- res_list$final_genres[[state]]
-  probability_matrix <- as.matrix(
-    P %*% t(res_list$mappings[[state]][final_genres, , drop = FALSE])
-  )
+  probability_matrix <- get_category_probability_matrix(P, res_list, chosen_k)
   cat_indices <- calculate_winners(probability_matrix, tiebreak_order)
   prob_track_map <- as.data.frame(probability_matrix)
   prob_track_map$cat <- colnames(probability_matrix)[cat_indices]
@@ -94,6 +90,29 @@ get_track_category_probabilities <- function(
   } else {
     prob_track_map[c("cat", "cat_prob")]
   }
+}
+
+get_category_probability_matrix <- function(P, res_list, chosen_k) {
+  #' Get the track × category probability matrix of the state with `chosen_k` categories.
+  state <- nrow(res_list$mappings[[1]]) - chosen_k + 1
+  final_genres <- res_list$final_genres[[state]]
+  as.matrix(P %*% t(res_list$mappings[[state]][final_genres, , drop = FALSE]))
+}
+
+prepare_assignment_votes <- function(data, categories) {
+  #' Align long tag data to the known tags of `categories`.
+  #' @return A list with the track info of `prepare_assignment_track_info()`, the normalized vote matrix `P` of the recognized tracks, and its `tiebreak_order`.
+  known_tags <- get_category_tags(categories)
+  track_info <- prepare_assignment_track_info(
+    prepare_long_tag_data(data),
+    known_tags
+  )
+  P <- get_normalized_vote_matrix(track_info$data, known_tags)
+  list(
+    track_info = track_info,
+    P = P,
+    tiebreak_order = get_tag_name_ranks_for_size_tiebreaking(P)
+  )
 }
 
 get_tag_name_ranks_for_size_tiebreaking <- function(P) {

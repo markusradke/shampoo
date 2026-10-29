@@ -22,13 +22,28 @@ N_TRIALS <- get_setting("N_TRIALS", 100L) # LightGBM trials and SVM grid size
 N_REPEATS <- get_setting("N_REPEATS", 20L) # RQ3 split and PFI repetitions
 DEBUGGING <- get_setting("DEBUG", FALSE) # subsample ML data for smoke runs
 
-start_workers <- function(n_workers = N_WORKERS, fork = FALSE) {
-  #' Start parallel workers. With `fork = TRUE`, Unix systems fork the running R process (no new R sessions, loaded packages and data are shared); Windows always starts new R sessions. Do not fork after LightGBM has run in the main process.
-  if (fork && future::supportsMulticore()) {
-    future::plan(future::multicore, workers = n_workers)
+start_workers <- function(n_workers = N_WORKERS) {
+  #' Start parallel workers as new R sessions (forking is unstable with multithreaded libraries and large heaps). Implicit BLAS / OpenMP / data.table threads are limited to one per worker; explicit thread counts like LightGBM's `num_threads` still apply.
+  # workers inherit the environment variables of the main process (libraries already loaded there are not affected)
+  Sys.setenv(
+    OMP_NUM_THREADS = 1,
+    OPENBLAS_NUM_THREADS = 1,
+    MKL_NUM_THREADS = 1,
+    R_DATATABLE_NUM_THREADS = 1
+  )
+  future::plan(future::multisession, workers = n_workers)
+}
+
+with_worker_progress <- function(expr) {
+  #' Evaluate `expr` and report the progress signaled by `progressr::progressor()` in the workers live: as progress bar in interactive sessions, else as one timestamped line per update (e.g. for log files of `Rscript`).
+  old_options <- options(progressr.enable = TRUE)
+  on.exit(options(old_options))
+  handler <- if (interactive()) {
+    progressr::handler_cli()
   } else {
-    future::plan(future::multisession, workers = n_workers)
+    progressr::handler_debug()
   }
+  progressr::with_progress(expr, handlers = handler, enable = TRUE)
 }
 
 use_project_python <- function() {

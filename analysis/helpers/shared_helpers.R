@@ -26,8 +26,8 @@ get_category_columns <- function(trackmap) {
 }
 
 load_shampoo_in_worker <- function() {
-  #' Load the development version of shampoo in a parallel worker session (forked workers have it already).
-  if (!"shampoo" %in% loadedNamespaces()) {
+  #' Load the development version of shampoo in a parallel worker session, replacing an installed version that `future` may have loaded for the `shampoo::` calls.
+  if (!pkgload::is_dev_package("shampoo")) {
     suppressMessages(devtools::load_all(quiet = TRUE))
   }
 }

@@ -148,25 +148,24 @@ assign_genre_categories <- function(
   method = c("both", "hard", "fuzzy")
 ) {
   method <- match.arg(method)
-  data <- prepare_long_tag_data(data)
   k <- validate_assignment_inputs(categories, k, k_supplied = !missing(k))
-  known_tags <- get_category_tags(categories)
-  track_info <- prepare_assignment_track_info(data, known_tags)
-  P <- get_normalized_vote_matrix(track_info$data, known_tags)
-  tiebreak_order <- get_tag_name_ranks_for_size_tiebreaking(P)
+  votes <- prepare_assignment_votes(data, categories)
 
   assignments <- lapply(k, function(chosen_k) {
     probabilities <- get_track_category_probabilities(
-      P,
+      votes$P,
       categories,
       chosen_k,
-      tiebreak_order,
+      votes$tiebreak_order,
       include_probabilities = method != "hard"
     )
-    probabilities <- complete_assignment_rows(probabilities, track_info$ids)
+    probabilities <- complete_assignment_rows(
+      probabilities,
+      votes$track_info$ids
+    )
     probabilities$assignment_status <- get_assignment_status(
       probabilities$id,
-      track_info
+      votes$track_info
     )
     format_assignment_output(probabilities, method)
   })

@@ -5,16 +5,28 @@ source("analysis/helpers/RQ5/evaluate_classifiers.R")
 load_classification_data <- function(k, n_debugging_rows = 3000) {
   #' Load the CV folds, holdout data, and categorical columns for granularity k (subsampled if DEBUGGING).
   folds <- readRDS(sprintf("data/classification_ready_data/folds_k%d.rds", k))
-  holdout <- readRDS(sprintf("data/classification_ready_data/holdout_k%d.rds", k))
+  holdout <- readRDS(sprintf(
+    "data/classification_ready_data/holdout_k%d.rds",
+    k
+  ))
   if (DEBUGGING) {
-    message(sprintf("DEBUGGING: using at most %d rows per data set", n_debugging_rows))
+    message(sprintf(
+      "DEBUGGING: using at most %d rows per data set",
+      n_debugging_rows
+    ))
     subsample <- function(data, rows) data[rows, , drop = FALSE]
     set.seed(RANDOM_STATE)
     for (part in c("train", "val")) {
       for (i in seq_along(folds$X_train)) {
         rows <- sample(nrow(folds[[paste0("X_", part)]][[i]]), n_debugging_rows)
-        folds[[paste0("X_", part)]][[i]] <- subsample(folds[[paste0("X_", part)]][[i]], rows)
-        folds[[paste0("y_hot_", part)]][[i]] <- subsample(folds[[paste0("y_hot_", part)]][[i]], rows)
+        folds[[paste0("X_", part)]][[i]] <- subsample(
+          folds[[paste0("X_", part)]][[i]],
+          rows
+        )
+        folds[[paste0("y_hot_", part)]][[i]] <- subsample(
+          folds[[paste0("y_hot_", part)]][[i]],
+          rows
+        )
       }
     }
     rows <- sample(nrow(holdout$X_holdout), n_debugging_rows)
@@ -120,20 +132,9 @@ perform_cv_for_lightgbm <- function(params, folds, categorical_columns) {
   })
   fold_metrics <- future.apply::future_lapply(
     fold_data,
-    function(fold) {
-      model <- train_lightgbm_model(
-        fold$X_train,
-        fold$y_hot_train,
-        params,
-        categorical_columns,
-        fold$X_val,
-        fold$y_hot_val
-      )
-      cbind(
-        evaluate_lightgbm_model(model, fold$X_val, fold$y_hot_val),
-        best_iteration = model$best_iter
-      )
-    },
+    train_and_evaluate_lightgbm_fold, # defined at top level, so only its arguments are sent to the workers
+    params = params,
+    categorical_columns = categorical_columns,
     future.seed = TRUE,
     future.packages = c("dplyr", "lightgbm")
   ) |>
@@ -145,6 +146,26 @@ perform_cv_for_lightgbm <- function(params, folds, categorical_columns) {
   cbind(
     summarize_cv_metrics(fold_metrics),
     mean_best_iteration = mean(fold_metrics$best_iteration)
+  )
+}
+
+train_and_evaluate_lightgbm_fold <- function(
+  fold,
+  params,
+  categorical_columns
+) {
+  #' Train a LightGBM model on the training data of a CV fold and evaluate it on the validation data.
+  model <- train_lightgbm_model(
+    fold$X_train,
+    fold$y_hot_train,
+    params,
+    categorical_columns,
+    fold$X_val,
+    fold$y_hot_val
+  )
+  cbind(
+    evaluate_lightgbm_model(model, fold$X_val, fold$y_hot_val),
+    best_iteration = model$best_iter
   )
 }
 
@@ -216,22 +237,30 @@ tune_linear_svm_model <- function(k, folds, n_costs) {
   #' Evaluate a logarithmic grid of costs between 1e-4 and 1e4 with 4-fold CV in parallel workers.
   #' @return The CV metrics per cost, also written to the tuning folder.
   costs <- exp(seq(log(1e-4), log(1e4), length.out = n_costs))
-  fold_metrics <- lapply(seq_along(folds$X_train), function(i) {
-    message(sprintf("Linear SVM K=%d: fold %d of %d", k, i, length(folds$X_train)))
-    fold <- lapply(folds[c("X_train", "y_hot_train", "X_val", "y_hot_val")], `[[`, i)
-    future.apply::future_lapply(
-      costs,
-      function(cost) {
-        model <- train_linear_svm_model(fold$X_train, fold$y_hot_train, cost)
-        data.frame(
-          cost = cost,
-          evaluate_linear_svm_model(model, fold$X_val, fold$y_hot_val)$metrics
-        )
-      },
-      future.seed = TRUE,
-      future.packages = c("dplyr", "LiblineaR")
-    ) |>
-      bind_rows()
+  fold_metrics <- with_worker_progress({
+    progress <- progressr::progressor(length(folds$X_train) * n_costs)
+    lapply(seq_along(folds$X_train), function(i) {
+      message(sprintf(
+        "Linear SVM K=%d: fold %d of %d",
+        k,
+        i,
+        length(folds$X_train)
+      ))
+      fold <- lapply(
+        folds[c("X_train", "y_hot_train", "X_val", "y_hot_val")],
+        `[[`,
+        i
+      )
+      future.apply::future_lapply(
+        costs,
+        evaluate_linear_svm_cost, # defined at top level, so only its arguments are sent to the workers
+        fold = fold,
+        progress = progress,
+        future.seed = TRUE,
+        future.packages = c("dplyr", "LiblineaR")
+      ) |>
+        bind_rows()
+    })
   })
   cv_metrics <- bind_rows(fold_metrics) |>
     group_by(cost) |>
@@ -245,6 +274,18 @@ tune_linear_svm_model <- function(k, folds, n_costs) {
     )
   )
   cv_metrics
+}
+
+evaluate_linear_svm_cost <- function(cost, fold, progress) {
+  #' Train a linear SVM with `cost` on the training data of a CV fold and get its metrics on the validation data.
+  model <- train_linear_svm_model(fold$X_train, fold$y_hot_train, cost)
+  metrics <- evaluate_linear_svm_model(
+    model,
+    fold$X_val,
+    fold$y_hot_val
+  )$metrics
+  progress(sprintf("cost %.4g: F1 macro %.3f", cost, metrics$F1_macro))
+  data.frame(cost = cost, metrics)
 }
 
 train_linear_svm_model <- function(train_data, train_labels, cost) {

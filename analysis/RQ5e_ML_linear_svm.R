@@ -8,7 +8,7 @@ source("analysis/config.R")
 source("analysis/helpers/RQ5/tuning_and_training.R")
 
 # GRID SEARCH, FINAL TRAINING, HOLDOUT EVALUATION ----
-start_workers(fork = TRUE) # costs of a CV fold are evaluated in parallel
+start_workers() # costs of a CV fold are evaluated in parallel
 for (k in CHOSEN_KS) {
   ml_data <- load_classification_data(k)
   cv_metrics <- tune_linear_svm_model(k, ml_data$folds, N_TRIALS)

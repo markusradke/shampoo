@@ -18,40 +18,45 @@ get_holdout_permutation_feature_importance <- function(
     holdout$y_hot_holdout
   )$F1_macro
   threads_per_group <- max(1L, N_WORKERS %/% length(feature_groups))
-  future.apply::future_lapply(
-    names(feature_groups),
-    function(group_name) {
-      model <- readRDS(model_path)
-      current_features <- feature_groups[[group_name]]
-      set.seed(random_state)
-      lapply(seq_len(n_rep), function(i) {
-        X_holdout_permuted <- holdout$X_holdout
-        row_permutation <- sample.int(nrow(X_holdout_permuted))
-        X_holdout_permuted[current_features] <- holdout$X_holdout[
-          row_permutation,
-          current_features,
-          drop = FALSE
-        ]
-        f1_permuted <- evaluate_lightgbm_model(
-          model,
-          X_holdout_permuted,
-          holdout$y_hot_holdout,
-          num_threads = threads_per_group
-        )$F1_macro
-        data.frame(
-          rep = i,
-          feature_group = group_name,
-          n_features_group = length(current_features),
-          base_f1_macro = base_f1_macro,
-          f1_macro_permuted = f1_permuted,
-          pfi_f1_group = base_f1_macro - f1_permuted # higher is better
-        )
-      }) |>
-        bind_rows()
-    },
-    future.seed = TRUE,
-    future.packages = c("dplyr", "lightgbm")
-  ) |>
+  with_worker_progress({
+    progress <- progressr::progressor(length(feature_groups))
+    future.apply::future_lapply(
+      names(feature_groups),
+      function(group_name) {
+        model <- readRDS(model_path)
+        current_features <- feature_groups[[group_name]]
+        set.seed(random_state)
+        group_pfi <- lapply(seq_len(n_rep), function(i) {
+          X_holdout_permuted <- holdout$X_holdout
+          row_permutation <- sample.int(nrow(X_holdout_permuted))
+          X_holdout_permuted[current_features] <- holdout$X_holdout[
+            row_permutation,
+            current_features,
+            drop = FALSE
+          ]
+          f1_permuted <- evaluate_lightgbm_model(
+            model,
+            X_holdout_permuted,
+            holdout$y_hot_holdout,
+            num_threads = threads_per_group
+          )$F1_macro
+          data.frame(
+            rep = i,
+            feature_group = group_name,
+            n_features_group = length(current_features),
+            base_f1_macro = base_f1_macro,
+            f1_macro_permuted = f1_permuted,
+            pfi_f1_group = base_f1_macro - f1_permuted # higher is better
+          )
+        }) |>
+          bind_rows()
+        progress(sprintf("feature group %s done", group_name))
+        group_pfi
+      },
+      future.seed = TRUE,
+      future.packages = c("dplyr", "lightgbm")
+    )
+  }) |>
     bind_rows()
 }
 

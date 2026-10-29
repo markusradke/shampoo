@@ -5,8 +5,7 @@ get_robustness_trajectories <- function(
   random_state,
   lambda = 0.5,
   max_k = length(unique(mb$tag_name)),
-  n_bins = 5,
-  chunk_size = 25
+  n_bins = 5
 ) {
   #' Compare the SHAMPOO models of two artist-disjoint training folds of one random split on a shared holdout set.
   #' @param mb A long data frame of tracks with columns id, track.s.firstartist.id, album.s.releaseyear, artist.s.popularity, tag_name, tag_count.
@@ -14,21 +13,18 @@ get_robustness_trajectories <- function(
   #' @param lambda The size / generality tradeoff parameter of SHAMPOO.
   #' @param max_k The maximum number of genre categories to compare.
   #' @param n_bins The number of quantile bins of popularity and release year used for stratification.
-  #' @param chunk_size The number of granularities assigned at once (limits memory, does not change results).
   #' @return A data frame with one row per k containing the processing order precision and Kendall's tau of the intersection, the hard assignment accuracy and the soft probability overlap on the holdout tracks recognized by both models, and the number of these tracks.
   splits <- stratified_split_1_2_holdout(mb, random_state, n_bins)
   models <- lapply(splits[c("fold_1", "fold_2")], function(fold) {
-    shampoo::aggregate_genre_categories(
+    model <- suppressMessages(shampoo::aggregate_genre_categories(
       shampoo::create_genre_dag(fold),
       lambda
-    )
+    ))
+    model$weights <- NULL # unused here, frees memory
+    model
   })
   ks <- seq_len(min(max_k, lengths(lapply(models, `[[`, "tags"))))
-  chunks <- split(ks, ceiling(ks / chunk_size))
-  track_agreement <- do.call(
-    rbind,
-    lapply(chunks, get_track_agreement, models, splits$holdout)
-  )
+  track_agreement <- get_track_agreement(ks, models, splits$holdout)
   data.frame(
     random_state = random_state,
     n_bins = n_bins,
@@ -137,62 +133,53 @@ get_order_agreement <- function(order_1, order_2, ks) {
 
 get_track_agreement <- function(ks, models, holdout) {
   #' Get hard assignment accuracy and soft probability overlap of two SHAMPOO models on the holdout tracks recognized by both models.
-  assignments <- lapply(models, assign_genre_categories_by_k, holdout, ks)
+  #' Uses the matrices behind `shampoo::assign_genre_categories()` one k at a time (assignments below the number of terminal nodes are those of the clipped k). Categories in only one model add pmin(p, 0) = 0 to the overlap, so it equals the zero-padded overlap.
+  votes <- lapply(models, function(model) {
+    suppressWarnings(shampoo:::prepare_assignment_votes(holdout, model))
+  })
+  recognized <- intersect(rownames(votes$fold_1$P), rownames(votes$fold_2$P))
+  votes <- lapply(votes, function(model_votes) {
+    model_votes$P <- model_votes$P[recognized, , drop = FALSE] # tiebreak order stays that of all recognized tracks
+    model_votes
+  })
   do.call(
     rbind,
     lapply(ks, function(k) {
-      trackmap_1 <- assignments$fold_1[[as.character(k)]]
-      trackmap_2 <- assignments$fold_2[[as.character(k)]]
-      recognized <- trackmap_1$assignment_status != "no_recognized_tags" &
-        trackmap_2$assignment_status != "no_recognized_tags"
+      probabilities <- Map(
+        function(model, model_votes) {
+          shampoo:::get_category_probability_matrix(
+            model_votes$P,
+            model,
+            max(k, length(model$terminal_nodes))
+          )
+        },
+        models,
+        votes
+      )
+      winners <- Map(
+        function(track_probabilities, model_votes) {
+          colnames(track_probabilities)[shampoo:::calculate_winners(
+            track_probabilities,
+            model_votes$tiebreak_order
+          )]
+        },
+        probabilities,
+        votes
+      )
+      shared <- intersect(
+        colnames(probabilities$fold_1),
+        colnames(probabilities$fold_2)
+      )
       data.frame(
-        track_acc = mean(
-          trackmap_1$cat[recognized] == trackmap_2$cat[recognized]
-        ),
-        track_prob_overlap = get_overlap(
-          trackmap_1[recognized, ],
-          trackmap_2[recognized, ]
-        ),
-        n_holdout_tracks = sum(recognized)
+        track_acc = mean(winners$fold_1 == winners$fold_2),
+        track_prob_overlap = mean(rowSums(pmin(
+          probabilities$fold_1[, shared, drop = FALSE],
+          probabilities$fold_2[, shared, drop = FALSE]
+        ))),
+        n_holdout_tracks = length(recognized)
       )
     })
   )
-}
-
-assign_genre_categories_by_k <- function(categories, holdout, ks) {
-  #' Assign holdout tracks for all ks, named by the requested k (assignments below the number of terminal nodes are those of the clipped k).
-  clipped_ks <- pmax(ks, length(categories$terminal_nodes))
-  assignments <- suppressWarnings(
-    shampoo::assign_genre_categories(holdout, categories, clipped_ks)
-  )
-  if (is.data.frame(assignments)) {
-    assignments <- list(assignments)
-    names(assignments) <- as.character(unique(clipped_ks))
-  }
-  stats::setNames(assignments[as.character(clipped_ks)], ks)
-}
-
-get_overlap <- function(trackmap_1, trackmap_2) {
-  #' Get the mean shared probability mass of two soft assignments (zero-padded for categories in only one of them).
-  categories <- union(
-    get_category_columns(trackmap_1),
-    get_category_columns(trackmap_2)
-  )
-  get_padded_probabilities <- function(trackmap) {
-    probabilities <- matrix(
-      0,
-      nrow(trackmap),
-      length(categories),
-      dimnames = list(NULL, categories)
-    )
-    present <- get_category_columns(trackmap)
-    probabilities[, present] <- as.matrix(trackmap[present])
-    probabilities
-  }
-  mean(rowSums(pmin(
-    get_padded_probabilities(trackmap_1),
-    get_padded_probabilities(trackmap_2)
-  )))
 }
 
 get_robustness_statistics <- function(robustness) {
@@ -238,7 +225,11 @@ plot_robustness <- function(
   if (max_k < 100) {
     x_breaks <- seq(0, max_k, by = 10)
   } else {
-    x_breaks <- c(seq(0, 100, by = 10), seq(100, max_k, by = 25))
+    if (max_k < 200) {
+      x_breaks <- c(seq(0, 100, by = 10), seq(100, max_k, by = 20))
+    } else {
+      x_breaks <- c(seq(0, max_k, by = 50))
+    }
   }
 
   ggplot(clip_ci, aes(x = k, y = mean, color = statistic)) +
