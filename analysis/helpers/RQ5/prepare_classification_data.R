@@ -1,5 +1,5 @@
 library(dplyr)
-library(rsample)
+source("analysis/helpers/shared_helpers.R")
 
 
 get_joined_classification_features <- function(
@@ -21,8 +21,7 @@ get_joined_classification_features <- function(
     left_join(spotify, by = "track.s.id") |>
     left_join(expressions, by = "track.s.id")
   message("Dropping rows with >40% missing features...")
-  n_missings <- apply(joined, 1, function(x) sum(is.na(x)))
-  relfreq_missings <- n_missings / (ncol(joined) - 1)
+  relfreq_missings <- rowSums(is.na(joined)) / (ncol(joined) - 1)
   drop_rows <- relfreq_missings > missing_features_drop
   dropped <- joined[!drop_rows, ]
   message(sprintf(
@@ -45,10 +44,10 @@ get_splits_with_dummy_coded_features <- function(
 ) {
   # create artist folds for cross-validation from training labels
   splits_ids <- get_artist_level_cat_split(
-    tracks = joined_train,
     cat = y_train,
     artists = artist_train,
-    n_folds = n_folds
+    n_folds = n_folds,
+    seed = seed
   )
   coded_splits_holdout <- dummy_code_categorical_features(
     joined_train = joined_train,
@@ -61,32 +60,26 @@ get_splits_with_dummy_coded_features <- function(
 }
 
 get_artist_level_cat_split <- function(
-  tracks,
   cat,
   artists,
   n_folds = 4,
   seed = 42
 ) {
-  artist_genres <- artists |>
-    left_join(cat, by = "track.s.id") |>
+  #' Split training tracks into artist-level folds, stratified by the artists' modal category (ties go to the rarest category).
+  artist_cats <- left_join(artists, cat, by = "track.s.id")
+  cat_tie_order <- names(sort(table(artist_cats$cat)))
+  artist_genres <- artist_cats |>
     group_by(track.s.firstartist.id) |>
     summarize(
-      mode_genre = names(sort(table(cat), decreasing = TRUE))[1],
+      mode_genre = get_mode_with_tie_breaker(cat, cat_tie_order),
       .groups = "drop"
     )
   set.seed(seed)
   artist_folds <- get_artist_folds(artist_genres, n_folds = n_folds)
-  tracks_fold <- left_join(
-    tracks,
-    select(artists, track.s.id),
-    by = "track.s.id"
-  )
-  track_folds <- lapply(artist_folds, function(fold) {
-    artists_in_fold <- fold$track.s.firstartist.id
-    tracks_in_fold <- artists |>
-      filter(track.s.firstartist.id %in% artists_in_fold) |>
+  report_fold_class_counts(artist_folds, artist_genres, artist_cats)
+  lapply(artist_folds, function(fold) {
+    filter(artists, track.s.firstartist.id %in% fold$track.s.firstartist.id) |>
       select(track.s.id)
-    tracks_in_fold
   })
 }
 
@@ -94,13 +87,45 @@ get_artist_folds <- function(artist_genres, n_folds = 4) {
   artist_folds <- rsample::vfold_cv(
     artist_genres,
     v = n_folds,
-    strata = mode_genre
+    strata = mode_genre,
+    pool = 0 # stratify by every category, also the rare ones
   )
-  nrows <- nrow(artist_folds)
-  lapply(seq_len(nrows), function(i) {
-    art_assess <- rsample::assessment(artist_folds$splits[[i]]) |>
-      select(track.s.firstartist.id)
+  lapply(artist_folds$splits, function(split) {
+    select(rsample::assessment(split), track.s.firstartist.id)
   })
+}
+
+report_fold_class_counts <- function(artist_folds, artist_genres, artist_cats) {
+  #' Print and save the number of artists (by modal category) and tracks per category in each validation fold, and their minimum per fold.
+  class_counts <- lapply(seq_along(artist_folds), function(i) {
+    fold_artists <- artist_folds[[i]]$track.s.firstartist.id
+    full_join(
+      artist_genres |>
+        filter(track.s.firstartist.id %in% fold_artists) |>
+        count(cat = mode_genre, name = "n_artists"),
+      artist_cats |>
+        filter(track.s.firstartist.id %in% fold_artists) |>
+        count(cat, name = "n_tracks"),
+      by = "cat"
+    ) |>
+      mutate(fold = i)
+  }) |>
+    bind_rows() |>
+    tidyr::replace_na(list(n_artists = 0L, n_tracks = 0L))
+  readr::write_csv(
+    class_counts,
+    "data/classification_ready_data/validation_fold_class_counts.csv"
+  )
+  message("Minimum number of artists and tracks per category in each validation fold:")
+  class_counts |>
+    group_by(fold) |>
+    summarize(
+      min_artists = min(n_artists),
+      category_min_artists = cat[which.min(n_artists)],
+      min_tracks = min(n_tracks),
+      category_min_tracks = cat[which.min(n_tracks)]
+    ) |>
+    print()
 }
 
 dummy_code_categorical_features <- function(
@@ -342,47 +367,4 @@ get_aligned_holdout_labels <- function(holdout, y_holdout) {
       left_join(y_holdout, by = "track.s.id") |>
       select(track.s.id, cat, cat_prob)
   )
-}
-
-get_median_mode_imputation_values <- function(
-  folds,
-  categorical_features
-) {
-  categorical_columns <- get_categorical_dummy_cols(
-    colnames(folds$X_train[[1]]),
-    categorical_features
-  )
-
-  # list of named vectors with median values for numeric columns and mode values for categorical columns for each fold
-  imputation_values <- list()
-  for (i in seq_along(folds$X_train)) {
-    temp <- get_median_mode(
-      folds$X_train[[i]],
-      categorical_columns
-    )
-    imputation_values[[sprintf("fold_%d", i)]] <- temp
-  }
-
-  full_train <- bind_rows(folds$X_train)
-  temp_full <- get_median_mode(
-    full_train,
-    categorical_columns
-  )
-  imputation_values[["full_train"]] <- temp_full
-  imputation_values
-}
-
-get_median_mode <- function(df, categorical_columns) {
-  numeric_columns <- setdiff(colnames(df), c("track.s.id", categorical_columns))
-  median_values <- sapply(
-    df[, numeric_columns, drop = FALSE],
-    median,
-    na.rm = TRUE
-  )
-  mode_values <- sapply(df[, categorical_columns, drop = FALSE], function(x) {
-    ux <- unique(x)
-    ux <- ux[!is.na(ux)]
-    ux[which.max(tabulate(match(x, ux)))]
-  })
-  c(median_values, mode_values)
 }

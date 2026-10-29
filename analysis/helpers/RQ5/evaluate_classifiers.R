@@ -1,34 +1,16 @@
-evaluate_final_lightgbm_model_on_holdout <- function(K, folds, holdout) {
-  message(sprintf("Evaluating final lgbm model on holdout for K=%d", K))
-  final_lgbm_model <- readRDS(sprintf(
-    "models/classification/final_lgbm_model_k%d.rds",
-    K
-  ))
-  holdout_data <- holdout$X_holdout
-  y_holdout_hot <- holdout$y_hot_holdout
-  holdout_evaluation <- evaluate_lightgbm_model(
-    final_lgbm_model,
-    holdout_data,
-    y_holdout_hot,
-    mode = "final"
-  )
-  print(holdout_evaluation$metrics)
-  plot <- plot_lightgbm_confusion_matrix(holdout_evaluation)
-  list(
-    holdout_evaluation = holdout_evaluation,
-    holdout_confusion_matrix_plot = plot
-  )
-}
-
 evaluate_lightgbm_model <- function(
   model,
   val_data,
   val_labels_hot_df,
-  mode = "train"
+  mode = "train",
+  num_threads = NULL
 ) {
-  message("Evaluating lgbm model on validation data...")
   hot_levels <- levels(val_labels_hot_df$cat)
-  y_pred_prob <- predict(model, as.matrix(select(val_data, -track.s.id)))
+  y_pred_prob <- predict(
+    model,
+    as.matrix(select(val_data, -track.s.id)),
+    params = if (is.null(num_threads)) list() else list(num_threads = num_threads)
+  )
   colnames(y_pred_prob) <- hot_levels
   y_pred_hot <- choose_first_max_class(y_pred_prob, hot_levels)
   val_labels_hot <- val_labels_hot_df$cat
@@ -79,34 +61,6 @@ evaluate_linear_svm_model <- function(
   }
 }
 
-evaluate_final_linear_svm_model_on_holdout <- function(K, holdout) {
-  message(sprintf("Evaluating final linear SVM on holdout for K=%d", K))
-  model <- readRDS(sprintf(
-    "models/classification/final_linear_svm_model_k%d.rds",
-    K
-  ))
-  evaluation <- evaluate_linear_svm_model(
-    model,
-    holdout$X_holdout,
-    holdout$y_hot_holdout,
-    mode = "final"
-  )
-  print(evaluation$metrics)
-  list(
-    holdout_evaluation = evaluation,
-    holdout_confusion_matrix_plot = plot_svm_confusion_matrix(evaluation)
-  )
-}
-
-plot_svm_confusion_matrix <- function(evaluation) {
-  cm_plot_data <- prepare_cm_plot_data(evaluation)
-  make_cm_plot(
-    cm_plot_data$df,
-    cm_plot_data$corner_label,
-    right_margin_pt = 20
-  )
-}
-
 compute_metrics <- function(y_pred_hot, y_true_hot) {
   kappa <- yardstick::kap_vec(y_pred_hot, y_true_hot)
   F1_macro <- get_f1_macro(y_pred_hot, y_true_hot)
@@ -149,16 +103,17 @@ get_f1_macro <- function(y_pred, y_true) {
   mean(f1_scores)
 }
 
-append_metrics_to_file <- function(metrics, model, trial_number) {
+append_metrics_to_file <- function(metrics, model, k, trial_number) {
   metrics <- cbind(
     trial_number = trial_number,
     model = model,
     metrics
   )
   filename <- sprintf(
-    "models/classification/tuning/%s_k%d_tuning_metrics.csv",
+    "models/classification/tuning/%s_%s_k%d_tuning_metrics.csv",
     model,
-    K
+    RUN_TAG,
+    k
   )
   # look for existing file, if not found create new file with header
   file_exists <- file.exists(filename)
@@ -224,7 +179,7 @@ get_label_certainty <- function(y_hot) {
 }
 
 
-plot_lightgbm_confusion_matrix <- function(holdout_evaluation) {
+plot_confusion_matrix <- function(holdout_evaluation) {
   cm_plot_data <- prepare_cm_plot_data(holdout_evaluation)
   make_cm_plot(
     cm_plot_data$df,

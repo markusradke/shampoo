@@ -1,190 +1,52 @@
 library(dplyr)
 source("analysis/helpers/RQ5/evaluate_classifiers.R")
 
-tune_and_save_lightgbm_model <- function(K, folds, n_trials = 100) {
-  message(sprintf("==========\nTuning lgbm for K=%d\n=========", K))
-  tpes_sampler <- optuna$samplers$TPESampler(seed = as.integer(RANDOM_STATE))
-  if (!file.exists("models/classification/tuning")) {
-    dir.create("models/classification/tuning", recursive = TRUE)
+# SHARED ----
+load_classification_data <- function(k, n_debugging_rows = 3000) {
+  #' Load the CV folds, holdout data, and categorical columns for granularity k (subsampled if DEBUGGING).
+  folds <- readRDS(sprintf("data/classification_ready_data/folds_k%d.rds", k))
+  holdout <- readRDS(sprintf("data/classification_ready_data/holdout_k%d.rds", k))
+  if (DEBUGGING) {
+    message(sprintf("DEBUGGING: using at most %d rows per data set", n_debugging_rows))
+    subsample <- function(data, rows) data[rows, , drop = FALSE]
+    set.seed(RANDOM_STATE)
+    for (part in c("train", "val")) {
+      for (i in seq_along(folds$X_train)) {
+        rows <- sample(nrow(folds[[paste0("X_", part)]][[i]]), n_debugging_rows)
+        folds[[paste0("X_", part)]][[i]] <- subsample(folds[[paste0("X_", part)]][[i]], rows)
+        folds[[paste0("y_hot_", part)]][[i]] <- subsample(folds[[paste0("y_hot_", part)]][[i]], rows)
+      }
+    }
+    rows <- sample(nrow(holdout$X_holdout), n_debugging_rows)
+    holdout <- lapply(holdout, subsample, rows)
   }
-  lgbm_study <- optuna$create_study(
-    direction = "maximize",
-    study_name = sprintf("lgbm_k%d", K),
-    load_if_exists = TRUE,
-    sampler = tpes_sampler,
-    storage = sprintf(
-      "sqlite:///%s/models/classification/tuning/optuna_tuning.sqlite3",
-      getwd()
-    )
-  )
-  # check if the study already has more than n_trial, and if so, skip optimization; else continue from the last trial
-  n_trials_remaining <- n_trials -
-    lgbm_study$trials_dataframe()$number |> length()
-  if (n_trials_remaining <= 0) {
-    message(sprintf(
-      "Study for K=%d already has %d trials, skipping optimization",
-      K,
-      lgbm_study$trials_dataframe()$number |> length()
-    ))
-    return()
-  }
-  lgbm_study$optimize(objective_lightgbm, n_trials = n_trials_remaining)
-  lgbm_best_params <- lgbm_study$best_params
-  saveRDS(
-    lgbm_best_params,
-    sprintf("models/classification/tuning/lgbm_best_params_k%d.rds", K)
+  list(
+    folds = folds,
+    holdout = holdout,
+    categorical_columns = readr::read_csv(
+      "data/classification_ready_data/categorical_columns.csv",
+      show_col_types = FALSE
+    )$column
   )
 }
 
-retrain_and_save_best_parameters_lightgbm_model <- function(K, folds) {
-  # skip if already exists
-  if (
-    file.exists(sprintf(
-      "models/classification/final_lgbm_model_k%d.rds",
-      K
-    ))
-  ) {
-    message(sprintf(
-      "Final lgbm model for K=%d already exists, skipping retraining",
-      K
-    ))
-    return()
-  }
-  message(sprintf("Retraining best lgbm on full training data for K=%d", K))
-  train_data <- folds$X_train[[1]]
-  train_labels <- folds$y_hot_train[[1]]
-  val_data <- folds$X_val[[1]] # necessary for early stopping
-  val_labels <- folds$y_hot_val[[1]]
-  best_params_lgbm <- readRDS(sprintf(
-    "models/classification/tuning/lgbm_best_params_k%d.rds",
-    K
-  ))
-  best_params_lgbm <- c(
-    best_params_lgbm,
-    list(
-      objective = "multiclass",
-      metric = "multi_logloss",
-      num_class = K,
-      seed = RANDOM_STATE,
-      num_threads = PHYSICAL_CORES,
-      deterministic = FALSE # still very close to deterministic, but way faster
-    )
-  )
-  final_lgbm_model <- train_lightgbm_model_with_early_stopping(
-    train_data,
-    train_labels,
-    val_data,
-    val_labels,
-    best_params_lgbm
-  )
-  saveRDS(
-    final_lgbm_model,
-    sprintf("models/classification/final_lgbm_model_k%d.rds", K)
+get_balanced_class_weights <- function(labels) {
+  #' Get the inverse class prevalence N / (K * n_c) per class, i.e. weights with mean 1 over all observations.
+  class_counts <- table(labels)
+  length(labels) / (length(class_counts) * class_counts)
+}
+
+get_full_training_data <- function(folds) {
+  #' Combine training and validation data of a fold to the full training set.
+  list(
+    X = bind_rows(folds$X_train[[1]], folds$X_val[[1]]),
+    y = bind_rows(folds$y_hot_train[[1]], folds$y_hot_val[[1]])
   )
 }
 
-tune_and_save_linear_svm_model <- function(K, folds, n_trials = 100) {
-  message(sprintf("==========\nTuning linear SVM for K=%d\n=========", K))
-  cost_grid <- exp(seq(log(1e-4), log(1e4), length.out = n_trials))
-  grid_sampler <- optuna$samplers$GridSampler(
-    search_space = list(cost = cost_grid)
-  )
-  if (!file.exists("models/classification/tuning")) {
-    dir.create("models/classification/tuning", recursive = TRUE)
-  }
-  svm_study <- optuna$create_study(
-    direction = "maximize",
-    study_name = sprintf("linear_svm_grid_k%d", K),
-    load_if_exists = TRUE,
-    sampler = grid_sampler,
-    storage = sprintf(
-      "sqlite:///%s/models/classification/tuning/optuna_tuning.sqlite3",
-      getwd()
-    )
-  )
-  n_trials_remaining <- n_trials -
-    svm_study$trials_dataframe()$number |> length()
-  if (n_trials_remaining <= 0) {
-    message(sprintf(
-      "Study for linear SVM K=%d already has %d trials, skipping optimization",
-      K,
-      svm_study$trials_dataframe()$number |> length()
-    ))
-    return()
-  }
-  svm_study$optimize(objective_linear_svm, n_trials = n_trials_remaining)
-  saveRDS(
-    svm_study$best_params,
-    sprintf(
-      "models/classification/tuning/linear_svm_grid_best_params_k%d.rds",
-      K
-    )
-  )
-}
-
-retrain_and_save_best_parameters_linear_svm_model <- function(K, folds) {
-  model_path <- sprintf(
-    "models/classification/final_linear_svm_model_k%d.rds",
-    K
-  )
-  if (file.exists(model_path)) {
-    message(sprintf(
-      "Final linear SVM model for K=%d already exists, skipping retraining",
-      K
-    ))
-    return()
-  }
-  message(sprintf("Retraining best linear SVM for K=%d", K))
-  best_params <- readRDS(sprintf(
-    "models/classification/tuning/linear_svm_grid_best_params_k%d.rds",
-    K
-  ))
-  model <- train_linear_svm_model(
-    rbind(folds$X_train[[1]], folds$X_val[[1]]),
-    rbind(folds$y_hot_train[[1]], folds$y_hot_val[[1]]),
-    best_params
-  )
-  saveRDS(model, model_path)
-}
-
-objective_linear_svm <- function(trial) {
-  params <- list(
-    cost = trial$suggest_float("cost", 1e-4, 1e4, log = TRUE)
-  )
-  message(sprintf("=========\nLinear SVM trial %d\n=========", trial$number))
-  metrics <- perform_cv_for_linear_svm(params, folds)
-  append_metrics_to_file(
-    metrics,
-    model = "linear_svm",
-    trial_number = trial$number
-  )
-  metrics$F1_macro_mean
-}
-
-perform_cv_for_linear_svm <- function(params, folds) {
-  folds_metrics <- data.frame()
-  for (i in seq_along(folds$X_train)) {
-    message(sprintf("Performing linear SVM CV for fold %d/%d", i, N_FOLDS))
-    model <- train_linear_svm_model(
-      folds$X_train[[i]],
-      folds$y_hot_train[[i]],
-      params
-    )
-    metrics <- evaluate_linear_svm_model(
-      model,
-      folds$X_val[[i]],
-      folds$y_hot_val[[i]]
-    )
-    message(sprintf(
-      "Fold %d validation metrics: F1_macro = %.3f, kappa = %.3f",
-      i,
-      metrics$metrics$F1_macro,
-      metrics$metrics$kappa
-    ))
-    folds_metrics <- bind_rows(folds_metrics, metrics$metrics)
-  }
+summarize_cv_metrics <- function(fold_metrics) {
   summarize(
-    folds_metrics,
+    fold_metrics,
     F1_macro_mean = mean(F1_macro),
     F1_macro_min = min(F1_macro),
     F1_macro_max = max(F1_macro),
@@ -198,25 +60,212 @@ perform_cv_for_linear_svm <- function(params, folds) {
   )
 }
 
-train_linear_svm_model <- function(train_data, train_labels, params) {
+get_optuna_storage <- function() {
+  sprintf(
+    "sqlite:///%s/models/classification/tuning/optuna_tuning.sqlite3",
+    getwd()
+  )
+}
+
+# LIGHTGBM ----
+tune_lightgbm_model <- function(k, folds, categorical_columns, n_trials) {
+  #' Tune LightGBM hyperparameters with TPE and 4-fold CV (resumes an existing study of the same run tag).
+  #' @return The Optuna study. Each trial stores the mean early-stopping iteration of its folds.
+  study <- optuna$create_study(
+    direction = "maximize",
+    study_name = sprintf("lgbm_%s_k%d", RUN_TAG, k),
+    load_if_exists = TRUE,
+    sampler = optuna$samplers$TPESampler(seed = as.integer(RANDOM_STATE)),
+    storage = get_optuna_storage()
+  )
+  objective <- function(trial) {
+    params <- list(
+      objective = "multiclass",
+      metric = "multi_logloss",
+      num_class = k,
+      n_estimators = trial$suggest_int("n_estimators", 100, 2000),
+      learning_rate = trial$suggest_float(
+        "learning_rate",
+        0.001,
+        0.3,
+        log = TRUE
+      ),
+      num_leaves = trial$suggest_int("num_leaves", 20, 70),
+      max_depth = trial$suggest_int("max_depth", 1, 15),
+      min_data_in_leaf = trial$suggest_int("min_data_in_leaf", 1, 100),
+      feature_fraction = trial$suggest_float("feature_fraction", 0.1, 1.0),
+      reg_alpha = trial$suggest_float("reg_alpha", 1e-8, 10, log = TRUE),
+      reg_lambda = trial$suggest_float("reg_lambda", 1e-8, 10, log = TRUE),
+      seed = RANDOM_STATE,
+      deterministic = FALSE # still very close to deterministic, but way faster
+    )
+    message(sprintf("========= K=%d, trial %d =========", k, trial$number))
+    metrics <- perform_cv_for_lightgbm(params, folds, categorical_columns)
+    trial$set_user_attr("mean_best_iteration", metrics$mean_best_iteration)
+    append_metrics_to_file(metrics, "lgbm", k, trial$number)
+    metrics$F1_macro_mean
+  }
+  n_trials_remaining <- n_trials - length(study$trials)
+  if (n_trials_remaining > 0) {
+    study$optimize(objective, n_trials = as.integer(n_trials_remaining))
+  }
+  study
+}
+
+perform_cv_for_lightgbm <- function(params, folds, categorical_columns) {
+  #' Train and evaluate one LightGBM model per fold in parallel workers, splitting the cores between folds.
+  params$num_threads <- max(1L, N_WORKERS %/% length(folds$X_train))
+  fold_data <- lapply(seq_along(folds$X_train), function(i) {
+    lapply(folds[c("X_train", "y_hot_train", "X_val", "y_hot_val")], `[[`, i)
+  })
+  fold_metrics <- future.apply::future_lapply(
+    fold_data,
+    function(fold) {
+      model <- train_lightgbm_model(
+        fold$X_train,
+        fold$y_hot_train,
+        params,
+        categorical_columns,
+        fold$X_val,
+        fold$y_hot_val
+      )
+      cbind(
+        evaluate_lightgbm_model(model, fold$X_val, fold$y_hot_val),
+        best_iteration = model$best_iter
+      )
+    },
+    future.seed = TRUE,
+    future.packages = c("dplyr", "lightgbm")
+  ) |>
+    bind_rows()
+  message(sprintf(
+    "CV F1 macro per fold: %s",
+    paste(round(fold_metrics$F1_macro, 3), collapse = ", ")
+  ))
+  cbind(
+    summarize_cv_metrics(fold_metrics),
+    mean_best_iteration = mean(fold_metrics$best_iteration)
+  )
+}
+
+train_lightgbm_model <- function(
+  train_data,
+  train_labels,
+  params,
+  categorical_columns,
+  val_data = NULL,
+  val_labels = NULL
+) {
+  #' Train a class-weighted LightGBM model for `params$n_estimators` rounds, with early stopping (50 rounds) if validation data is given.
+  get_dataset <- function(data, labels, weights = NULL) {
+    lightgbm::lgb.Dataset(
+      data = as.matrix(select(data, -track.s.id)),
+      label = as.integer(labels$cat) - 1,
+      categorical_feature = categorical_columns,
+      weight = weights
+    )
+  }
+  class_weights <- get_balanced_class_weights(train_labels$cat)
+  train_set <- get_dataset(
+    train_data,
+    train_labels,
+    as.numeric(class_weights[as.character(train_labels$cat)])
+  )
+  has_validation <- !is.null(val_data)
+  lightgbm::lgb.train(
+    params = params[names(params) != "n_estimators"],
+    data = train_set,
+    nrounds = params$n_estimators,
+    valids = if (has_validation) {
+      list(validation = get_dataset(val_data, val_labels))
+    } else {
+      list()
+    },
+    early_stopping_rounds = if (has_validation) 50,
+    verbose = -1
+  )
+}
+
+train_final_lightgbm_model <- function(k, study, folds, categorical_columns) {
+  #' Retrain the best trial on the full training set with its mean early-stopping iteration from CV as number of rounds.
+  best_trial <- study$best_trial
+  params <- c(
+    best_trial$params,
+    list(
+      objective = "multiclass",
+      metric = "multi_logloss",
+      num_class = k,
+      seed = RANDOM_STATE,
+      num_threads = N_WORKERS,
+      deterministic = FALSE
+    )
+  )
+  params$n_estimators <- round(best_trial$user_attrs$mean_best_iteration)
+  saveRDS(params, get_model_path("lgbm_final_params", k))
+  full_training <- get_full_training_data(folds)
+  train_lightgbm_model(
+    full_training$X,
+    full_training$y,
+    params,
+    categorical_columns
+  )
+}
+
+# LINEAR SVM ----
+tune_linear_svm_model <- function(k, folds, n_costs) {
+  #' Evaluate a logarithmic grid of costs between 1e-4 and 1e4 with 4-fold CV in parallel workers.
+  #' @return The CV metrics per cost, also written to the tuning folder.
+  costs <- exp(seq(log(1e-4), log(1e4), length.out = n_costs))
+  fold_metrics <- lapply(seq_along(folds$X_train), function(i) {
+    message(sprintf("Linear SVM K=%d: fold %d of %d", k, i, length(folds$X_train)))
+    fold <- lapply(folds[c("X_train", "y_hot_train", "X_val", "y_hot_val")], `[[`, i)
+    future.apply::future_lapply(
+      costs,
+      function(cost) {
+        model <- train_linear_svm_model(fold$X_train, fold$y_hot_train, cost)
+        data.frame(
+          cost = cost,
+          evaluate_linear_svm_model(model, fold$X_val, fold$y_hot_val)$metrics
+        )
+      },
+      future.seed = TRUE,
+      future.packages = c("dplyr", "LiblineaR")
+    ) |>
+      bind_rows()
+  })
+  cv_metrics <- bind_rows(fold_metrics) |>
+    group_by(cost) |>
+    summarize_cv_metrics()
+  readr::write_csv(
+    cv_metrics,
+    sprintf(
+      "models/classification/tuning/linear_svm_%s_k%d_tuning_metrics.csv",
+      RUN_TAG,
+      k
+    )
+  )
+  cv_metrics
+}
+
+train_linear_svm_model <- function(train_data, train_labels, cost) {
+  #' Train a class-weighted L2-regularized L2-loss linear SVM (primal solver) on median-imputed, standardized features.
   feature_names <- setdiff(names(train_data), "track.s.id")
   if (!all(vapply(train_data[feature_names], is.numeric, logical(1)))) {
     stop("Linear SVM features must be numeric after preprocessing.")
   }
   x_train <- as.matrix(train_data[feature_names])
-  imputation <- fit_svm_imputer(x_train)
-  x_train <- apply_svm_imputer(x_train, imputation)
+  imputation <- fit_median_imputer(x_train)
+  x_train <- apply_median_imputer(x_train, imputation)
   scaling <- fit_svm_scaler(x_train)
   x_train <- apply_svm_scaler(x_train, scaling)
   y_train <- factor(train_labels$cat)
-  class_counts <- table(y_train)
-  class_weights <- 1 / as.numeric(class_counts)
+  class_weights <- as.numeric(get_balanced_class_weights(y_train))
   names(class_weights) <- as.character(seq_along(class_weights))
   fit <- LiblineaR::LiblineaR(
     data = x_train,
     target = as.integer(y_train),
-    type = 1,
-    cost = params$cost,
+    type = 2,
+    cost = cost,
     wi = class_weights,
     bias = 1,
     verbose = FALSE
@@ -230,18 +279,18 @@ train_linear_svm_model <- function(train_data, train_labels, params) {
   )
 }
 
-fit_svm_imputer <- function(x_train) {
+fit_median_imputer <- function(x_train) {
   medians <- apply(x_train, 2, median, na.rm = TRUE)
   if (anyNA(medians)) {
     stop(sprintf(
-      "Linear SVM training features are entirely missing: %s",
+      "Training features are entirely missing: %s",
       paste(names(medians)[is.na(medians)], collapse = ", ")
     ))
   }
   list(median = medians)
 }
 
-apply_svm_imputer <- function(x, imputation) {
+apply_median_imputer <- function(x, imputation) {
   for (feature in seq_len(ncol(x))) {
     missing <- is.na(x[, feature])
     if (any(missing)) {
@@ -249,7 +298,7 @@ apply_svm_imputer <- function(x, imputation) {
     }
   }
   if (anyNA(x)) {
-    stop("Linear SVM features contain missing values after median imputation.")
+    stop("Features contain missing values after median imputation.")
   }
   x
 }
@@ -273,137 +322,18 @@ predict_linear_svm <- function(model, new_data) {
       paste(missing_features, collapse = ", ")
     ))
   }
-  if (!all(vapply(new_data[model$feature_names], is.numeric, logical(1)))) {
-    stop("Linear SVM features must be numeric after preprocessing.")
-  }
   x_new <- as.matrix(new_data[model$feature_names])
-  x_new <- apply_svm_imputer(x_new, model$imputation)
+  x_new <- apply_median_imputer(x_new, model$imputation)
   x_new <- apply_svm_scaler(x_new, model$scaling)
   decision_values <- predict(
     model$fit,
     x_new,
     decisionValues = TRUE
   )$decisionValues
-  choose_first_max_class(decision_values, model$class_levels)
-}
-
-objective_lightgbm <- function(trial) {
-  params <- list(
-    objective = "multiclass",
-    metric = "multi_logloss",
-    num_class = K,
-    n_estimators = trial$suggest_int("n_estimators", 100, 2000),
-    learning_rate = trial$suggest_float(
-      "learning_rate",
-      0.001,
-      0.3,
-      log = TRUE
-    ),
-    num_leaves = trial$suggest_int("num_leaves", 20, 70),
-    max_depth = trial$suggest_int("max_depth", 1, 15),
-    min_data_in_leaf = trial$suggest_int("min_data_in_leaf", 1, 100),
-    feature_fraction = trial$suggest_float("feature_fraction", 0.1, 1.0),
-    reg_alpha = trial$suggest_float("reg_alpha", 1e-8, 10, log = TRUE),
-    reg_lambda = trial$suggest_float("reg_lambda", 1e-8, 10, log = TRUE),
-    seed = RANDOM_STATE,
-    deterministic = FALSE, # still very close to deterministic, but way faster
-    num_threads = PHYSICAL_CORES
+  # LiblineaR orders the columns by first appearance of the classes in training
+  class_columns <- as.character(seq_along(model$class_levels))
+  choose_first_max_class(
+    decision_values[, class_columns, drop = FALSE],
+    model$class_levels
   )
-  message(sprintf("=========\nTrial %d\n=========", trial$number))
-  metrics <- perform_cv_for_lightgbm_params(params, folds)
-  append_metrics_to_file(metrics, model = "lgbm", trial_number = trial$number)
-  metrics$F1_macro_mean
-}
-
-
-perform_cv_for_lightgbm_params <- function(params, folds) {
-  folds_metrics <- data.frame()
-  for (i in seq_along(folds$X_train)) {
-    message(sprintf("Performing CV for fold %d/%d", i, N_FOLDS))
-    train_data <- folds$X_train[[i]]
-    train_labels <- folds$y_hot_train[[i]]
-    val_data <- folds$X_val[[i]]
-    val_labels_hot <- folds$y_hot_val[[i]]
-    # pass validation data for early stopping
-    res_model <- train_lightgbm_model_with_early_stopping(
-      train_data,
-      train_labels,
-      val_data,
-      val_labels_hot,
-      params
-    )
-    metrics <- evaluate_lightgbm_model(
-      res_model,
-      val_data,
-      val_labels_hot
-    )
-    message(sprintf(
-      "Fold %d validation metrics: F1_macro = %.3f, kappa = %.3f, mn_log_loss = %.3f",
-      i,
-      metrics$F1_macro,
-      metrics$kappa,
-      metrics$mn_log_loss
-    ))
-    folds_metrics <- bind_rows(folds_metrics, metrics)
-  }
-  metrics_summary <- summarize(
-    folds_metrics,
-    F1_macro_mean = mean(F1_macro),
-    F1_macro_min = min(F1_macro),
-    F1_macro_max = max(F1_macro),
-    F1_SE = sd(F1_macro) / sqrt(n()),
-    F1_macro_vals = paste(round(F1_macro, 3), collapse = ";"),
-    kappa_mean = mean(kappa),
-    Kappa_min = min(kappa),
-    Kappa_max = max(kappa),
-    kappa_SE = sd(kappa) / sqrt(n()),
-    kappa_vals = paste(round(kappa, 3), collapse = ";")
-  )
-  metrics_summary
-}
-
-train_lightgbm_model_with_early_stopping <- function(
-  train_data,
-  train_labels,
-  val_data,
-  val_labels,
-  params
-) {
-  class_weights <- train_labels |>
-    group_by(cat) |>
-    summarize(n = n()) |>
-    mutate(weight = 1 / n) |>
-    select(cat, weight)
-  training_weights <- train_labels |>
-    left_join(class_weights, by = "cat") |>
-    pull(weight)
-  data <- lightgbm::lgb.Dataset(
-    data = as.matrix(select(train_data, -track.s.id)),
-    label = as.integer(train_labels$cat) - 1,
-    categorical_feature = CATEGORICAL_COLUMNS,
-    weight = training_weights
-  )
-  val_data <- lightgbm::lgb.Dataset(
-    data = as.matrix(select(val_data, -track.s.id)),
-    label = as.integer(val_labels$cat) - 1,
-    categorical_feature = CATEGORICAL_COLUMNS
-  )
-  fit <- lightgbm::lgb.train(
-    params = params,
-    data = data,
-    nrounds = params$n_estimators,
-    valids = list(validation = val_data),
-    early_stopping_rounds = 50,
-    verbose = -1
-  )
-  fit
-}
-
-median_mode_imputation <- function(data, imputation_vals) {
-  for (col in names(imputation_vals)) {
-    if (col %in% colnames(data)) {
-      data[[col]][is.na(data[[col]])] <- imputation_vals[[col]]
-    }
-  }
-  data
 }

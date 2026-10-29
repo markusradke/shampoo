@@ -113,51 +113,16 @@ plot_gini_genre_categories_full <- function(cat_states) {
     )
 }
 
-get_one_hot_probs <- function(long) {
-  long <- dplyr::select(long, id, tag_name, tag_count)
-  order_tags <- long |>
-    dplyr::group_by(tag_name) |>
-    dplyr::summarize(total_count = dplyr::n_distinct(id)) |>
-    dplyr::arrange(-total_count) |>
-    dplyr::select(tag_name) |>
-    dplyr::mutate(rank = dplyr::row_number())
-  hot <- long |>
-    dplyr::left_join(order_tags, by = "tag_name") |>
-    dplyr::group_by(id) |>
-    dplyr::arrange(-tag_count, -rank) |>
-    dplyr::slice_head(n = 1) |>
-    dplyr::ungroup()
-  all_genres <- unique(long$tag_name)
-  full_hot_wide <- tidyr::pivot_wider(
-    hot,
-    names_from = tag_name,
-    values_from = tag_count,
-    values_fill = list(tag_count = 0)
-  )
-  missing_cols <- setdiff(all_genres, colnames(full_hot_wide))
-  full_hot_wide[missing_cols] <- 0
-  # make all non-zero values 1 (except for the id column)
-  full_hot_norm <- full_hot_wide |>
-    dplyr::mutate(dplyr::across(-id, ~ ifelse(. > 0, 1, 0))) |>
-    dplyr::arrange(id)
-
-  full_wide <- long |>
-    tidyr::pivot_wider(
-      names_from = tag_name,
-      values_from = tag_count,
-      values_fill = list(tag_count = 0)
-    )
-  V <- full_wide[-1] |> as.matrix()
-  P <- V / rowSums(V)
-  P_full <- cbind(select(full_wide, id), as.data.frame(P)) |>
-    dplyr::arrange(id)
-
-  M_full <- dplyr::select(P_full, -id) |> as.matrix()
-  M_hot <- dplyr::select(full_hot_norm, -id) |> as.matrix()
-  rownames(M_hot) <- full_hot_norm$id
-  M_hot[, colnames(M_full)]
+get_majority_votes <- function(long, cat_states) {
+  #' Get the original majority vote tag of each track, i.e. its hard SHAMPOO category before any aggregation (same tie-breaking as SHAMPOO).
+  shampoo::assign_genre_categories(
+    long,
+    cat_states,
+    k = length(cat_states$tags),
+    method = "hard"
+  ) |>
+    select(id, cat_naive = cat)
 }
-
 
 plot_one_hot_acc_trajectory <- function(
   cat_states,
@@ -213,10 +178,7 @@ plot_one_hot_acc_trajectory <- function(
     )
 }
 
-plot_full_one_hot_acc_trajectory <- function(
-  cat_states,
-  P
-) {
+plot_full_one_hot_acc_trajectory <- function(cat_states) {
   metrics <- cat_states$metrics |>
     filter(!is.na(onehot_acc))
   xlim_max <- max(metrics$k)
@@ -266,24 +228,11 @@ plot_full_one_hot_acc_trajectory <- function(
     )
 }
 
-save_chosen_k_supergenre_networks_gephi <- function(cat_states, P, k) {
-  matrix_long <- data.frame(
-    id = rep(rownames(P), times = ncol(P)),
-    tag_name = rep(colnames(P), each = nrow(P)),
-    tag_count = as.vector(P)
-  )
-  track_mapping <- shampoo::assign_genre_categories(
-    matrix_long,
-    cat_states,
-    k
-  )
-  final_genres <- track_mapping |> select(-cat, -cat_prob) |> colnames()
-  G <- cat_states$weights[[1]] |> nrow()
-  k_weights <- cat_states$weights[[G - k + 1]][
-    final_genres,
-    final_genres
-  ]
-  sizes <- count(track_mapping, cat)
+save_supergenre_network_gephi <- function(cat_states, trackmap, k) {
+  state <- nrow(cat_states$weights[[1]]) - k + 1
+  final_genres <- cat_states$final_genres[[state]]
+  k_weights <- cat_states$weights[[state]][final_genres, final_genres]
+  sizes <- count(trackmap, cat)
   # make graph and add sizes as node attributes
   k_graph <- igraph::graph_from_adjacency_matrix(
     t(k_weights),
@@ -333,7 +282,7 @@ export_graph_for_gephi_import <- function(
     select(-n)
   n_edges <- igraph::ecount(graph)
   if (n_edges == 0) {
-    message(sprintf("Graph %s has no edges, skipping export.", name))
+    message(sprintf("Graph %s has no edges, skipping export.", filepath))
     return(NULL)
   }
   edges_df <- as.data.frame(igraph::get.edges(
@@ -357,34 +306,15 @@ export_graph_for_gephi_import <- function(
   )
 }
 
-get_flow_summary <- function(long, hard_classes, perc_threshold = 1) {
-  #' Get a summary of the flows between hard classes from naive one-hot predictions to latent categories.
-  #' @param long The long format data frame containing the one-hot predictions. Data frame containing columns: track.s.id, tag_name, tag_count.
-  #' @param hard_classes The data frame containing the hard class assignments. Data frame containing columns: track.s.id, cat.
+get_flow_summary <- function(majority_votes, hard_classes, perc_threshold = 1) {
+  #' Get a summary of the flows between hard classes from original majority vote tags to latent categories.
+  #' @param majority_votes The data frame containing the majority vote tag of each track. Data frame containing columns: id, cat_naive.
+  #' @param hard_classes The data frame containing the hard class assignments. Data frame containing columns: id, cat.
   #' @param perc_threshold The minimum percentage threshold for including flows in the summary. Default is 1%.
   #' @return A data frame summarizing the flows between hard classes and naive predictions, including prevalence and flow percentages.
-  one_hot <- get_one_hot_probs(long)
-  ids <- dcast(
-    long,
-    id ~ tag_name,
-    value.var = "tag_count",
-    fill = 0
-  ) |>
-    pull(id)
-  # naive_votes <- data.frame(
-  #   track.s.id = ids,
-  #   cat_naive = apply(one_hot, 1, function(x) {
-  #     colnames(one_hot)[which.max(x)]
-  #   })
-  # )
-  naive_votes <- data.frame(
-    id = rownames(one_hot),
-    cat_naive = colnames(one_hot)[max.col(one_hot, ties.method = "first")]
-  )
-
   hard_classes_naive <- left_join(
     hard_classes,
-    naive_votes,
+    majority_votes,
     by = c("id")
   ) |>
     select(id, cat, cat_naive)

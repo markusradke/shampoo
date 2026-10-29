@@ -8,8 +8,7 @@ assign_genre_categories(
   data,
   categories,
   k = NULL,
-  method = c("both", "hard", "fuzzy"),
-  assignment_status = FALSE
+  method = c("both", "hard", "fuzzy")
 )
 }
 \arguments{

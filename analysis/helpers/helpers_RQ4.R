@@ -1,3 +1,5 @@
+source("analysis/helpers/shared_helpers.R")
+
 get_dc_equiv_sets <- function(mb_genres, dc_genres) {
   equiv <- vector(mode = "list", length = length(dc_genres))
   names(equiv) <- dc_genres
@@ -25,7 +27,10 @@ get_dc_equiv_sets <- function(mb_genres, dc_genres) {
   )
   equiv <- add_to_equiv_mapping(equiv, broken_eq)
 
-  manual_eq <- c("Funk / Soul" = "r&b")
+  manual_eq <- c(
+    "Funk / Soul" = "r&b",
+    "Stage & Screen" = "cinematic classical"
+  )
   equiv <- add_to_equiv_mapping(equiv, manual_eq)
 
   equiv_found <- equiv[sapply(equiv, function(x) length(x) > 0)]
@@ -39,13 +44,6 @@ get_dc_equiv_sets <- function(mb_genres, dc_genres) {
 }
 
 get_dz_equiv <- function(mb_genres, dz_genres) {
-  # some German genre names in Deezer mapped back to English
-  dz_map <- get_dz_translation_map()
-  dz <- apply_ext_translation(dz, dz_map)
-
-  mb_genres <- get_tag_names(mb, "tag_name")
-  dz_genres <- get_tag_names(dz, "tag_name")
-
   equiv <- vector(mode = "list", length = length(dz_genres))
   names(equiv) <- dz_genres
 
@@ -62,16 +60,11 @@ get_dz_equiv <- function(mb_genres, dz_genres) {
       "Singer & Songwriter",
       "Singer & Songwriter",
       "Indie Rock/Rock Pop",
-      "Dancehall/Ragga",
-      "Dancehall/Ragga",
-      "Rock & Roll/Rockabilly",
-      "Rock & Roll/Rockabilly",
+      "Indie Rock/Rock Pop",
       "Schlager & Volksmusik",
       "Schlager & Volksmusik",
       "Movies/Video Games",
-      "Movies/Video Games",
-      "Soul & Funk",
-      "Soul & Funk"
+      "Movies/Video Games"
     ),
     proxy_genres = c(
       "techno",
@@ -80,17 +73,12 @@ get_dz_equiv <- function(mb_genres, dz_genres) {
       "hip hop",
       "singer",
       "songwriter",
+      "indie rock",
       "rock pop",
-      "dancehall",
-      "ragga",
-      "rock & roll",
-      "rockabilly",
       "schlager",
       "volksmusik",
       "movies",
-      "video games",
-      "soul",
-      "funk"
+      "video games"
     )
   )
   equiv <- add_to_equiv_mapping(equiv, broken_eq)
@@ -100,13 +88,9 @@ get_dz_equiv <- function(mb_genres, dz_genres) {
     "Indie Rock/Rock Pop" = "pop rock",
     "Singer & Songwriter" = "singer-songwriter",
     "Latin Music" = "latin",
-    "Asian Music" = "k-pop",
-    "Asian Music" = "j-pop",
-    "Asian Music" = "j-rock",
-    "Rock & Roll/Rockabilly" = "rock and roll",
-    "Brazilian Music" = "bossa nova",
-    "Brazilian Music" = "mpb",
-    "Dance" = "electronic"
+    "Electro" = "electronic",
+    "Soundtrack" = "classical",
+    "Soundtrack" = "cinematic classical"
   )
   equiv <- add_to_equiv_mapping(equiv, manual_eq)
   equiv_found <- equiv[sapply(equiv, function(x) length(x) > 0)]
@@ -119,136 +103,53 @@ get_dz_equiv <- function(mb_genres, dz_genres) {
   equiv_found[sort(names(equiv_found))]
 }
 
-run_dc_compare <- function(
-  dc_equiv,
-  mb,
-  dc,
-  P,
-  dag,
-  cat_states,
-  load_states_if_exists = TRUE
-) {
-  mb_genres <- get_tag_names(mb, "tag_name")
-  dc_genres <- get_tag_names(dc, "tag_name")
-
-  proc_order <- get_proc_order(mb_genres, dc_equiv)
-
-  if (
-    load_states_if_exists && file.exists("models/dag/cat_states_discogs.rds")
-  ) {
-    cat_states_dc <- readRDS("models/dag/cat_states_discogs.rds")
-  } else {
-    cat_states_dc <- build_cat_states(
-      dag,
-      P,
-      proc_order,
-      "models/dag/cat_states_discogs.rds"
-    )
-  }
-
-  hard_dc <- get_hard_classes(
+run_external_compare <- function(equiv, mb, external, dag, taxonomy_label) {
+  #' Aggregate SHAMPOO to the MusicBrainz equivalents of an external taxonomy and compare hard assignments in a contingency table.
+  #' @param equiv A named list mapping external genres to their MusicBrainz equivalents.
+  #' @param mb The long MusicBrainz data (columns id, tag_name, tag_count).
+  #' @param external The long single-label external data (columns id, tag_name).
+  #' @param dag The SHAMPOO genre DAG of the MusicBrainz data.
+  #' @param taxonomy_label The name of the external taxonomy.
+  #' @return A list with the hard class contingency data and the plot.
+  cat_states_target <- shampoo::aggregate_genre_categories(
+    dag,
+    target_set = unique(unlist(equiv))
+  )
+  hard_classes <- shampoo::assign_genre_categories(
     mb,
-    dc,
-    P,
-    cat_states_dc,
-    tax_label = "Discogs",
-    k = length(unique(unlist(dc_equiv)))
+    cat_states_target,
+    method = "hard"
+  ) |>
+    select(id, cat) |>
+    inner_join(
+      distinct(external, id, ext_cat = tag_name),
+      by = "id"
+    )
+  plot <- plot_hard_classes_contingency(
+    hard_classes,
+    taxonomy_label,
+    unique(cat_states_target$target_set),
+    right_margin_pt = 50
   )
-  hard_dc$ext_cat <- hard_dc$discogs_cat
-
-  hard_dc_enriched <- add_preview_urls(
-    hard_classes = hard_dc,
-    mb = mb,
-    by_col = "track.s.id",
-    cat_col = "discogs_cat"
-  )
-
-  plot <- plot_conting(
-    hard_dc,
-    "Discogs",
-    get_equiv_plot_order(dc_equiv),
-    margin_pt = 20
-  )
-
-  list(hard_dc = hard_dc, hard_dc_enriched = hard_dc_enriched, plot = plot)
+  list(hard_classes = hard_classes, plot = plot)
 }
 
-run_dz_compare <- function(
-  dz_equiv,
-  mb,
-  dz,
-  P,
-  dag,
-  cat_states,
-  load_states_if_exists = TRUE
-) {
-  k <- length(unique(unlist(dz_equiv)))
-  proc_order <- get_proc_order(mb_genres, dz_equiv)
-
-  if (
-    load_states_if_exists && file.exists("models/dag/cat_states_deezer.rds")
-  ) {
-    cat_states_dz <- readRDS("models/dag/cat_states_deezer.rds")
-  } else {
-    cat_states_dz <- build_cat_states(
-      dag,
-      P,
-      proc_order,
-      "models/dag/cat_states_deezer.rds"
-    )
-  }
-
-  hard_dz <- get_hard_classes(
-    mb,
-    dz,
-    P,
-    cat_states_dz,
-    tax_label = "Deezer",
-    k = k
+calc_ginis <- function(external, hard_classes, mb, cat_states) {
+  #' Compare the Gini coefficient of the external hard classes with the SHAMPOO solution of the same granularity (aggregation order by size and generality) on the same tracks.
+  external_levels <- unique(external$tag_name)
+  shampoo_classes <- shampoo::assign_genre_categories(
+    filter(mb, id %in% hard_classes$id),
+    cat_states,
+    length(external_levels),
+    method = "both"
   )
-  hard_dz$ext_cat <- ifelse(
-    hard_dz$deezer_cat %in% names(get_dz_translation_map()),
-    get_dz_translation_map()[hard_dz$deezer_cat],
-    hard_dz$deezer_cat
-  )
-
-  hard_dz_enriched <- add_preview_urls(
-    hard_classes = hard_dz,
-    mb = mb,
-    by_col = "track.s.id",
-    cat_col = "deezer_cat"
-  )
-
-  plot <- plot_conting(
-    hard_dz,
-    "Deezer",
-    get_equiv_plot_order(dz_equiv),
-    margin_pt = 25
-  )
-  list(hard_dz = hard_dz, hard_dz_enriched = hard_dz_enriched, plot = plot)
-}
-
-
-calc_ginis <- function(res_dc, res_dz, dc, dz, P, cat_states) {
-  dc_levels <- unique(dc$tag_name)
-  dz_levels <- unique(dz$tag_name)
   list(
-    dc_gini = gini_vec(res_dc$hard_dc$discogs_cat, dc_levels),
-    dz_gini = gini_vec(res_dz$hard_dz$deezer_cat, dz_levels),
-    mb_gini_dc = get_mb_gini(
-      P,
-      cat_states,
-      length(dc_levels),
-      res_dc$hard_dc$track.s.id
+    external_gini = gini_vec(hard_classes$ext_cat, external_levels),
+    shampoo_gini = gini_vec(
+      shampoo_classes$cat,
+      get_category_columns(shampoo_classes)
     ),
-    mb_gini_dz = get_mb_gini(
-      P,
-      cat_states,
-      length(dz_levels),
-      res_dz$hard_dz$track.s.id
-    ),
-    n_dc = length(dc_levels),
-    n_dz = length(dz_levels)
+    n_categories = length(external_levels)
   )
 }
 
@@ -293,10 +194,6 @@ add_to_equiv_mapping <- function(equiv, mapping) {
   equiv
 }
 
-get_ext_setdiff <- function(ext_genres, equiv) {
-  setdiff(ext_genres, equiv)
-}
-
 apply_ext_translation <- function(dz_dt, trans_map) {
   dz_dt |>
     mutate(
@@ -306,61 +203,6 @@ apply_ext_translation <- function(dz_dt, trans_map) {
         tag_name
       )
     )
-}
-
-get_proc_order <- function(mb_genres, equiv) {
-  flat_equiv <- unlist(equiv)
-  c(setdiff(mb_genres, flat_equiv), flat_equiv)
-}
-
-get_equiv_plot_order <- function(equiv) {
-  setNames(unlist(equiv), NULL)
-}
-
-build_cat_states <- function(dag, P, proc_order, rds_path) {
-  cat_states_comp <- shampoo::aggregate_genre_categories(
-    dag,
-    processing_order = proc_order,
-    fast = TRUE
-  )
-  saveRDS(cat_states_comp, rds_path)
-  readRDS(rds_path)
-}
-
-get_hard_classes <- function(mb, ext, P, cat_states_comp, tax_label, k) {
-  get_hard_class_contingency(
-    mb,
-    ext,
-    P,
-    cat_states_comp,
-    taxonomy_label = tax_label,
-    chosen_k = k
-  )
-}
-
-enrich_hard_classes <- function(hard_classes, ext_cat_col, mb, cat_col) {
-  ext_cat <- hard_classes[[ext_cat_col]]
-  hc <- hard_classes
-  hc$ext_cat <- ext_cat
-  hc
-}
-
-add_preview_urls <- function(hard_classes, mb, by_col, cat_col) {
-  hard_classes |>
-    left_join(
-      distinct(mb, track.s.id, .keep_all = TRUE),
-      by = "track.s.id"
-    ) |>
-    select(cat_col, cat, track.s.previewurl, everything())
-}
-
-plot_conting <- function(hard_classes, tax_label, order_vec, margin_pt) {
-  plot_hard_classes_contingency(
-    hard_classes,
-    tax_label,
-    order_vec,
-    right_margin_pt = margin_pt
-  )
 }
 
 get_dz_translation_map <- function() {
@@ -386,53 +228,6 @@ gini_vec <- function(vec, levels = NULL) {
   DescTools::Gini(as.numeric(counts), unbiased = TRUE)
 }
 
-
-count_unique <- function(vec) {
-  length(unique(vec))
-}
-
-get_mb_gini <- function(P, cat_states, n_cat, track_ids = NULL) {
-  if (!is.null(track_ids)) {
-    P <- P[rownames(P) %in% track_ids, , drop = FALSE]
-  }
-  tm <- shampoo::assign_genre_categories(
-    data.frame(id = rownames(P), tag_name = rep(colnames(P), each = nrow(P)),
-               tag_count = as.vector(P)),
-    cat_states,
-    n_cat
-  )
-  retained <- setdiff(colnames(tm), c("cat", "cat_prob"))
-  gini_vec(tm$cat, levels = retained)
-}
-
-get_hard_class_contingency <- function(
-  mb,
-  filtered_cat,
-  P_mb,
-  cat_states_mb,
-  taxonomy_label,
-  chosen_k
-) {
-  mb_map_id <- shampoo::assign_genre_categories(
-    mb,
-    cat_states_mb,
-    chosen_k,
-    method = "hard"
-  ) |> distinct(id, cat)
-  cat_wide <- filtered_cat |>
-    dplyr::distinct(id, tag_name) |>
-    dplyr::transmute(
-      id,
-      !!paste0(tolower(taxonomy_label), "_cat") := tag_name
-    )
-
-  dplyr::inner_join(
-    cat_wide,
-    mb_map_id,
-    by = "id"
-  ) |>
-    as.data.frame()
-}
 
 plot_hard_classes_contingency <- function(
   contingency,

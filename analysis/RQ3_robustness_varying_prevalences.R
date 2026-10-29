@@ -5,69 +5,57 @@ library(data.table)
 library(ggplot2)
 library(readr)
 devtools::load_all()
+source("analysis/config.R")
 source("analysis/helpers/helpers_RQ3.R")
 
-LAMBDA <- 0.5
-RANDOM_STATE <- 42
-N_BINS <- 5 # for the split of the data into folds
-N_REPEATS <- 20 # number of repetitions for the robustness analysis
-MAX_K <- 265 # set to number of genre tags after denoising
-N_WORKERS <- 3 # number of parallel workers for the robustness analysis
+N_BINS <- 5 # quantile bins of popularity and release year for stratification
+CHECKPOINT_DIR <- "models/dag/robustness_checkpoints"
 
 # LOAD DATA ----
-mb <- fread("data/long_data/mb_long.csv")
+mb <- fread(
+  "data/long_data/mb_long.csv",
+  select = c(
+    "id",
+    "tag_name",
+    "tag_count",
+    "track.s.firstartist.id",
+    "album.s.releaseyear",
+    "artist.s.popularity"
+  )
+)
+max_k <- length(unique(mb$tag_name))
 
-
-# CALCULATE ROBUSTNESS TRAJECTORIES FOR DIFFERENT DRAWS ----
+# CALCULATE ROBUSTNESS TRAJECTORIES FOR DIFFERENT DRAWS IN PARALLEL ----
 set.seed(RANDOM_STATE)
 seeds <- sample(1:10000, N_REPEATS, replace = FALSE)
 
-for (i in seq_len(N_REPEATS)) {
-  message(sprintf(
-    "CALCULATING ROBUSTNESS TRAJECTORIES FOR DRAW %d/%d",
-    i,
-    N_REPEATS
-  ))
-  if (
-    file.exists(sprintf(
-      "models/dag/robustness_checkpoints/robustness_trajectories_%02d.csv",
-      i
-    ))
-  ) {
-    message("File already exists, skipping...")
-    next
-  }
-  random_state <- seeds[i]
-
-  fold_assignments <- get_assignments_to_compare(
-    mb = mb,
-    lambda = LAMBDA,
-    random_state = random_state,
-    max_k = MAX_K,
-    n_bins = N_BINS
-  )
-
-  robustness <- get_robustness_trajectories(fold_assignments)
-
-  out <- sprintf(
-    "models/dag/robustness_checkpoints/robustness_trajectories_%02d.csv",
-    i
-  )
-  write_csv(robustness, out)
-  rm(fold_assignments, robustness)
-  gc()
-
-  NULL
-}
-
-# LOAD ROBUSTNESS TRAJECTORIES AND COMBINE ----
-robustness_files <- list.files(
-  path = "models/dag/robustness_checkpoints/",
-  pattern = "robustness_trajectories_\\d{2}\\.csv",
-  full.names = TRUE
-)
-robustness <- lapply(robustness_files, read_csv) |>
+start_workers(min(N_WORKERS, N_REPEATS), fork = TRUE)
+robustness <- future.apply::future_lapply(
+  seq_len(N_REPEATS),
+  function(i) {
+    checkpoint <- file.path(
+      CHECKPOINT_DIR,
+      sprintf("robustness_trajectories_%s_%02d.csv", RUN_TAG, i)
+    )
+    if (file.exists(checkpoint)) {
+      return(read_csv(checkpoint, show_col_types = FALSE))
+    }
+    load_shampoo_in_worker()
+    trajectories <- get_robustness_trajectories(
+      mb,
+      random_state = seeds[i],
+      lambda = LAMBDA,
+      max_k = max_k,
+      n_bins = N_BINS
+    )
+    write_csv(trajectories, checkpoint)
+    trajectories
+  },
+  future.seed = TRUE, # draws are seeded explicitly with `seeds`
+  future.packages = "dplyr"
+) |>
   bind_rows()
+future::plan(future::sequential)
 
 # CALCULATE ROBUSTNESS STATISTICS AND PLOT ----
 robustness_statistics <- get_robustness_statistics(robustness)
@@ -77,12 +65,7 @@ plot_robustness(
   ylabel = "Order precision (top k intersection)",
   max_k = 150
 )
-ggsave(
-  "reports/figures/fig06_robustness_order.png",
-  width = 6,
-  height = 4.5,
-  dpi = 600
-)
+save_figure("fig06_robustness_order.png", width = 6, height = 4.5)
 
 plot_robustness(
   robustness_statistics,
@@ -90,9 +73,4 @@ plot_robustness(
   ylabel = "Track assignment accuracy and probability overlap",
   max_k = 150
 )
-ggsave(
-  "reports/figures/fig07_robustness_trackassignment.png",
-  width = 6,
-  height = 4.5,
-  dpi = 600
-)
+save_figure("fig07_robustness_trackassignment.png", width = 6, height = 4.5)

@@ -1,9 +1,11 @@
-import pandas as pd
-import numpy as np
 import os
+import sys
 
+import pandas as pd
 from scipy import sparse
 
+# run from the repo root; the lyrics helpers live next to the R helpers
+sys.path.insert(0, "analysis/helpers/RQ5/lyrics_analysis")
 from helpers.FightingExtractor import FightingExtractor
 
 

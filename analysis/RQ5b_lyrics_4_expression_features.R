@@ -132,8 +132,7 @@ ref_type_index_zero <- get_zero_index_reference_type(stm_model)
 ref_type_index_R <- ref_type_index_zero + 1
 
 # Interpret models ----
-type_labels <- paste("lyrics.expr", seq(1, 25), sep = "_")
-labelTopics(stm_model, n = 200)$frex[1, ] # total of 25 latent expression types
+labelTopics(stm_model, n = 200)$frex[1, ] # first of the latent expression types
 
 train <- get_features_for_classifcation(
   X_train,

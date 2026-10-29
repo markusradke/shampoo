@@ -53,89 +53,62 @@ prepare_musicbrainz_corpus <- function(
     n_min_votes = min_votes
   )
   message(sprintf(
-    "Retained %s tracks and %d tags with MusicBrainz tags after min.%d votes denoising.",
-    format(nrow(distinct(mb_long_tag_denoise, track.s.id)), big.mark = ","),
-    nrow(distinct(mb_long_tag_denoise, tag_name)),
+    "Retained %s tracks and %d tags with MusicBrainz tags after min. %d votes denoising.",
+    format(nrow(distinct(mb_long_vote_denoise, track.s.id)), big.mark = ","),
+    nrow(distinct(mb_long_vote_denoise, tag_name)),
     min_votes
   ))
 
-  mb_final <- mb_long_tag_denoise |>
+  mb_final <- mb_long_vote_denoise |>
     dplyr::select(-dplyr::matches("genres$"), id = track.s.id)
   mb_final
 }
 
-prepare_discogs_corpus <- function(
+prepare_external_corpus <- function(
   poptrag_selected,
   mb_final,
-  min_tracks_per_tag
+  genre_column,
+  non_music_tags,
+  min_artists_per_tag
 ) {
-  mb_final_ids <- dplyr::distinct(mb_final, track.s.id)
-  dc <- poptrag_selected |>
-    dplyr::filter(!is.na(album.dc.genres_str)) |>
-    dplyr::semi_join(mb_final_ids, by = "track.s.id")
-
-  dc_long <- dc |>
-    tidyr::separate_rows(album.dc.genres_str, sep = "; ") |>
-    dplyr::rename(tag_name = album.dc.genres_str) |>
-    dplyr::select(id = track.s.id, track.s.firstartist.id, tag_name) |>
+  #' Prepare single-label release genres of an external taxonomy (Discogs, Deezer) for the tracks in the MusicBrainz corpus.
+  external_long <- poptrag_selected |>
+    dplyr::filter(
+      !is.na(.data[[genre_column]]),
+      track.s.id %in% mb_final$id
+    ) |>
+    tidyr::separate_rows(dplyr::all_of(genre_column), sep = "; ") |>
+    dplyr::select(
+      id = track.s.id,
+      track.s.firstartist.id,
+      tag_name = dplyr::all_of(genre_column)
+    ) |>
     dplyr::mutate(tag_count = 1L) |>
-    dplyr::filter(!tag_name %in% c("Non-Music", "Children's", ""))
+    dplyr::filter(!tag_name %in% c(non_music_tags, ""))
 
-  dc_long_tag_denoise <- filter_abs_artist_prevalence(
-    dc_long,
-    min_abs_prevalence = min_tracks_per_tag
+  external_denoised <- filter_abs_artist_prevalence(
+    external_long,
+    min_abs_prevalence = min_artists_per_tag
   )
   message(sprintf(
-    "Retaind %d Discogs tags after denoising.",
-    nrow(distinct(dc_long_tag_denoise, tag_name))
+    "Retained %d tags of %s after denoising.",
+    nrow(distinct(external_denoised, tag_name)),
+    genre_column
   ))
-  message("Selecting single tag per track ...")
-  single_tags <- select_single_tag_per_track(dc_long_tag_denoise)
-  print(count(single_tags, tag_name, sort = T), n = 100)
-  single_tags
-}
-
-prepare_deezer_corpus <- function(
-  poptrag_selected,
-  mb_final,
-  dz_non_music_tags,
-  min_tracks_per_tag
-) {
-  mb_final_ids <- dplyr::distinct(mb_final, track.s.id)
-  dz <- poptrag_selected |>
-    dplyr::filter(!is.na(album.dz.genres_str)) |>
-    dplyr::semi_join(mb_final_ids, by = "track.s.id")
-
-  dz_long <- dz |>
-    tidyr::separate_rows(album.dz.genres_str, sep = "; ") |>
-    dplyr::rename(tag_name = album.dz.genres_str) |>
-    dplyr::select(id = track.s.id, track.s.firstartist.id, tag_name) |>
-    dplyr::mutate(tag_count = 1L) |>
-    dplyr::filter(!tag_name %in% dz_non_music_tags)
-
-  dz_long_tag_denoise <- filter_abs_artist_prevalence(
-    dz_long,
-    min_abs_prevalence = min_tracks_per_tag
-  )
-  message(sprintf(
-    "Retaind %d Deezer tags after denoising.",
-    nrow(distinct(dz_long_tag_denoise, tag_name))
-  ))
-  message("Selecting single tag per track ...")
-  single_tags <- select_single_tag_per_track(dz_long_tag_denoise)
-  print(count(single_tags, tag_name, sort = T), n = 100)
+  single_tags <- select_single_tag_per_track(external_denoised)
+  print(count(single_tags, tag_name, sort = TRUE), n = 100)
   single_tags
 }
 
 select_single_tag_per_track <- function(tags) {
   unique_tags <- tags |>
-    dplyr::distinct(track.s.id, tag_name, .keep_all = TRUE)
+    dplyr::distinct(id, tag_name, .keep_all = TRUE)
   freq <- unique_tags |>
     dplyr::count(tag_name, name = "n_tracks")
 
   unique_tags |>
     dplyr::left_join(freq, by = "tag_name") |>
-    dplyr::group_by(track.s.id) |>
+    dplyr::group_by(id) |>
     dplyr::arrange(n_tracks, tag_name, .by_group = TRUE) |>
     dplyr::slice_head(n = 1) |>
     dplyr::ungroup() |>
@@ -443,7 +416,7 @@ unpack_genre_tags <- function(tags) {
     utils::setTxtProgressBar(pb = pb, value = i)
   }
   message("\nBinding tags ...")
-  do.call(rbind, tagged_frames)
+  as.data.frame(data.table::rbindlist(tagged_frames, fill = TRUE))
 }
 
 calculate_tag_counts <- function(tags, method, preserve_source = FALSE) {

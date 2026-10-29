@@ -4,73 +4,61 @@ get_spotify_shampoo_map <- function(
   spotify,
   train_holdout,
   min_artist_prev,
-  lambda = 0.5
+  lambda = 0.5,
+  max_k = 30
 ) {
   #' Build a SHAMPOO mapping of Spotify artist genres to categories using the training data and apply it to the holdout data.
   #' @param spotify A data.table containing Spotify genre information. Columns should include id, tag_name, and tag_count.
   #' @param train_holdout A list containing character vectors with training and holdout track IDs.
   #' @param min_artist_prev A numeric value specifying the minimum prevalence of a genre tag on unique artist level in the training data.
   #' @param lambda A numeric value specifying the lambda parameter for the SHAMPOO algorithm.
+  #' @param max_k The maximum number of distribution genre categories.
   #' @return A list containing data frames with the training and holdout features with Spotify genre mappings.
-  #' @details This function processes Spotify artist genre data with the SHAMPOO algorithm to create a mapping of genres to categories based on the training data. It then applies this mapping to the holdout data, ensuring that only genres present in the training data are considered for the holdout set. The function also filters out binary genres and low mean probability genres (< 0.001 in the training data). If the SHAMPOO mapping has already been computed and saved, it will load the existing mapping instead of recomputing it; if you wish to recompute the mapping, delete the file "models/dag/cat_states_spotify.rds" before running this function.
+  #' @details This function processes Spotify artist genre data with the SHAMPOO algorithm to create a mapping of genres to categories based on the training data. The number of categories is the local Gini minimum (at most `max_k`) with the lowest Gini. The mapping is applied to the holdout data, ensuring that only genres present in the training data are considered for the holdout set. The function also filters out binary genres and low mean probability genres (< 0.001 in the training data).
   spotify_train <- build_spotify_train(
     spotify = spotify,
     train_tracks = train_holdout$train_tracks,
     min_artist_prev
   )
-  spotify_train_dag <- shampoo::create_genre_dag(spotify_train)
-  P_s_train <- spotify_train_dag$tag_matrix
-  binary_cols <- get_binary_columns(P_s_train)
-  spotify_train_filtered <- filter_binary_genres(
-    spotify_train = spotify_train,
-    binary_columns = binary_cols
-  )
 
+  # filter out binary genres (present in either all or none of the training tracks)
+  binary_cols <- get_binary_columns(
+    shampoo::create_genre_dag(spotify_train)$tag_matrix
+  )
+  spotify_train_filtered <- filter(spotify_train, !tag_name %in% binary_cols)
   spotify_train_dag <- shampoo::create_genre_dag(spotify_train_filtered)
-  P_s_train_filtered <- spotify_train_dag$tag_matrix
+  spotify_holdout <- spotify |>
+    filter(
+      id %in% train_holdout$test_tracks,
+      tag_name %in% spotify_train_dag$tags
+    )
 
-  spotify_holdout <- build_spotify_holdout(
-    spotify = spotify,
-    test_tracks = train_holdout$test_tracks,
-    train_tag_cols = colnames(P_s_train_filtered)
+  cat_states_s <- shampoo::aggregate_genre_categories(
+    spotify_train_dag,
+    lambda = lambda
   )
-
-  cat_states_s <- get_or_build_cat_states_spotify(
-    dag_s_train = spotify_train_dag,
-    lambda
-  )
-
-  ginis <- build_gini_frame(cat_states_s)
-  chosen_k <- choose_k_from_gini(ginis)
+  saveRDS(cat_states_s, "models/dag/cat_states_spotify.rds")
+  chosen_k <- choose_k_from_gini(cat_states_s$metrics, max_k)
 
   s_trackmap_train <- shampoo::assign_genre_categories(
     spotify_train_filtered,
     cat_states_s,
     chosen_k
   )
-
   to_remove <- get_low_mean_cols(s_trackmap_train)
-  s_features_train <- build_track_features(
-    spotify_train_filtered,
-    s_trackmap_train,
-    to_remove
-  )
-
   s_trackmap_holdout <- shampoo::assign_genre_categories(
     spotify_holdout,
     cat_states_s,
     chosen_k
   )
-
-  s_features_holdout <- build_track_features(
-    spotify_holdout,
-    s_trackmap_holdout,
-    to_remove
-  )
+  message(sprintf(
+    "Using %d Spotify distribution genre categories.",
+    chosen_k - length(to_remove)
+  ))
 
   list(
-    train = s_features_train,
-    holdout = s_features_holdout
+    train = build_track_features(s_trackmap_train, to_remove),
+    holdout = build_track_features(s_trackmap_holdout, to_remove)
   )
 }
 
@@ -89,85 +77,24 @@ get_binary_columns <- function(P_s_train) {
   colnames(P_s_train)[binary_mask]
 }
 
-filter_binary_genres <- function(spotify_train, binary_columns) {
-  spotify_train |>
-    filter(!tag_name %in% binary_columns)
-}
-
-build_spotify_holdout <- function(spotify, test_tracks, train_tag_cols) {
-  spotify |>
-    filter(id %in% test_tracks) |>
-    filter(tag_name %in% train_tag_cols)
-}
-
-get_or_build_cat_states_spotify <- function(
-  dag_s_train,
-  lambda = 0.5
-) {
-  if (file.exists("models/dag/cat_states_spotify.rds")) {
-    readRDS("models/dag/cat_states_spotify.rds")
-  } else {
-    cat_states_s <- shampoo::aggregate_genre_categories(
-      dag_s_train,
-      lambda = lambda
-    )
-    saveRDS(cat_states_s, "models/dag/cat_states_spotify.rds")
-    cat_states_s
-  }
-}
-
-build_gini_frame <- function(cat_states_s) {
-  data.frame(
-    k = rev(cat_states_s$metrics$k),
-    gini = rev(cat_states_s$metrics$gini)
-  )
-}
-
-choose_k_from_gini <- function(ginis) {
+choose_k_from_gini <- function(metrics, max_k) {
+  #' Choose the number of categories with the lowest Gini among the local Gini minima up to `max_k`.
+  ginis <- metrics[order(metrics$k), ]
   local_min <- which(diff(sign(diff(ginis$gini))) == 2) + 1
-  local_min <- local_min[local_min <= 30]
-  chosen_k <- local_min[which.min(ginis$gini[local_min])]
-  chosen_k
+  local_min <- local_min[ginis$k[local_min] <= max_k]
+  ginis$k[local_min[which.min(ginis$gini[local_min])]]
 }
 
-get_low_mean_cols <- function(s_trackmap_train) {
-  meanprobs <- s_trackmap_train |>
-    select(-cat, -cat_prob) |>
-    as.matrix() |>
-    colMeans() |>
-    sort(decreasing = TRUE)
-
-  to_remove <- names(meanprobs[meanprobs < 0.001])
-  if (length(to_remove) < 0) {
-    to_remove <- names(max(meanprobs))
-  }
-  to_remove
+get_low_mean_cols <- function(s_trackmap_train, min_mean_prob = 0.001) {
+  mean_probs <- colMeans(s_trackmap_train[get_category_columns(
+    s_trackmap_train
+  )])
+  names(mean_probs)[mean_probs < min_mean_prob]
 }
 
-build_track_features <- function(
-  spotify_long,
-  trackmap,
-  to_remove
-) {
-  spotify_long |>
-    inner_join(trackmap, by = "id") |>
-    select(id, all_of(colnames(trackmap))) |>
-    select(-cat, -cat_prob) |>
-    select(-all_of(to_remove)) |>
-    distinct(id, .keep_all = TRUE) |>
-    rename_with(~ paste0("sp_", .), -id) |>
-    rename_with(~ gsub(" ", "_", .), -id) |>
-    rename_with(~ gsub("&", "_", .), -id) |>
-    rename_with(~ gsub("-", "_", .), -id)
-}
-
-
-pad_vote_matrix <- function(P_s_holdout, colnames_train) {
-  missing_cols <- setdiff(colnames_train, colnames(P_s_holdout))
-  P_s_padded <- cbind(
-    P_s_holdout,
-    matrix(0, nrow = nrow(P_s_holdout), ncol = length(missing_cols))
-  )
-  colnames(P_s_padded) <- c(colnames(P_s_holdout), missing_cols)
-  P_s_padded[, colnames_train]
+build_track_features <- function(trackmap, to_remove) {
+  #' Build one row of Spotify distribution genre probabilities per track, prefixed with "sp_" and with syntactic column names.
+  trackmap[c("id", setdiff(get_category_columns(trackmap), to_remove))] |>
+    rename(track.s.id = id) |>
+    rename_with(~ paste0("sp_", gsub("[ &-]", "_", .x)), -track.s.id)
 }

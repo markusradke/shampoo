@@ -3,7 +3,7 @@ rm(list = ls())
 gc()
 library(dplyr)
 library(readr)
-devtools::load_all()
+source("analysis/config.R")
 source("analysis/helpers/RQ5/prepare_classification_data.R")
 
 CATEGORICAL_FEATURES <- c(
@@ -25,8 +25,7 @@ CATEGORICAL_FEATURES <- c(
   "is.major.label"
 )
 N_FOLDS <- 4
-K <- 31 # highest K for classification task (split at highest granularity)
-OTHER_Ks <- c(5, 15)
+K <- max(CHOSEN_KS) # folds are stratified at the highest granularity
 
 
 # LOAD AND JOIN DATA ----
@@ -56,8 +55,6 @@ poptrag_features <- poptrag_features[
   !poptrag_features %in% c("artist.s.genres")
 ]
 # drops rows with >40% missing features
-# Training: Retained 115,643 samples (85%) after dropping rows with >40% missing features
-# Holdout: Retained 29,097 samples (84%) after dropping rows with >40% missing features
 joined_train <- get_joined_classification_features(
   poptrag,
   poptrag_features,
@@ -106,9 +103,6 @@ categorical_columns <- get_categorical_dummy_cols(
   colnames(lumped_dummies$splits[[1]]),
   CATEGORICAL_FEATURES
 )
-if (!file.exists("data/classification_ready_data")) {
-  dir.create("data/classification_ready_data")
-}
 write_csv(
   data.frame(column = categorical_columns),
   "data/classification_ready_data/categorical_columns.csv"
@@ -118,18 +112,8 @@ write_csv(
 folds <- get_folds_from_splits(lumped_dummies$splits)
 holdout <- lumped_dummies$holdout
 
-
-median_mode_imputation_vals <- get_median_mode_imputation_values(
-  folds,
-  CATEGORICAL_FEATURES
-)
-saveRDS(
-  median_mode_imputation_vals,
-  "data/classification_ready_data/median_mode_imputation_values.rds"
-)
-
 # align with labels for different Ks and save folds and holdout data for each K
-for (k in c(OTHER_Ks, K)) {
+for (k in CHOSEN_KS) {
   y_train_k <- labels[[as.character(k)]]$train
   y_holdout_k <- labels[[as.character(k)]]$holdout
   hot_levels <- sort(unique(union(y_train_k$cat, y_holdout_k$cat)))

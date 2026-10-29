@@ -1,11 +1,12 @@
 rm(list = ls())
 gc()
 library(ggplot2)
+source("analysis/config.R")
 source("analysis/helpers/helpers_prepare_corpora.R")
 
 MIN_VOTES <- 2
 MIN_ARTIST_PREV_MODEL <- 0.001
-MIN_TRACKS_PER_TAG <- 100
+MIN_ARTISTS_PER_EXTERNAL_TAG <- 100
 
 MB_WHITELIST_PATH <- "data-raw/musicbrainz_genre_whitelist_20250616.rds"
 MB_NON_MUSIC_TAGS <- c(
@@ -19,6 +20,8 @@ MB_NON_MUSIC_TAGS <- c(
   "audio drama"
 )
 saveRDS(MB_NON_MUSIC_TAGS, "data/long_data/mb_non_music_tags.rds")
+
+DC_NON_MUSIC_TAGS <- c("Non-Music", "Children's")
 
 DZ_NON_MUSIC_TAGS <- c(
   "Comedy",
@@ -47,7 +50,7 @@ file_paths <- c(
   "models/classification",
   "models/classification/tuning/",
   "models/lyrics/",
-  "reports/figures"
+  "reports/figures/appendix"
 )
 
 # if folders do not exist, create them
@@ -71,33 +74,30 @@ mb_long <- prepare_musicbrainz_corpus(
 )
 save_tags_csv(mb_long, "data/long_data/mb_long.csv")
 
-discogs_long <- prepare_discogs_corpus(
+discogs_long <- prepare_external_corpus(
   poptrag_selected,
   mb_long,
-  MIN_TRACKS_PER_TAG
+  "album.dc.genres_str",
+  DC_NON_MUSIC_TAGS,
+  MIN_ARTISTS_PER_EXTERNAL_TAG
 )
 save_tags_csv(discogs_long, "data/long_data/dc_long.csv")
 
-deezer_long <- prepare_deezer_corpus(
+deezer_long <- prepare_external_corpus(
   poptrag_selected,
   mb_long,
+  "album.dz.genres_str",
   DZ_NON_MUSIC_TAGS,
-  MIN_TRACKS_PER_TAG
+  MIN_ARTISTS_PER_EXTERNAL_TAG
 )
 save_tags_csv(deezer_long, "data/long_data/dz_long.csv")
 
 spotify_long <- prepare_spotify_corpus(
   poptrag_selected,
   S_NON_MUSIC_TAGS,
-  # 0 # Done later with the ML training corpus
-  0.005 # DEBUG
+  0 # prevalence filter is applied later on the ML training tracks (RQ5a)
 )
 save_tags_csv(spotify_long, "data/long_data/s_long.csv")
 
 plot_corpus_composition(mb_long)
-ggsave(
-  "reports/figures/fig02_corpus_composition.png",
-  width = 6,
-  height = 5,
-  dpi = 600
-)
+save_figure("fig02_corpus_composition.png", width = 6, height = 5)

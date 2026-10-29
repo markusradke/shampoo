@@ -1,8 +1,8 @@
-get_artist_level_strata_split <- function(artist_strata, mb, test_size, seed) {
+get_artist_level_strata_split <- function(artist_strata, mb, train_size, seed) {
   set.seed(seed)
   split <- rsample::initial_split(
     artist_strata,
-    prop = test_size,
+    prop = train_size,
     strata = "strata",
     pool = 0
   )
@@ -14,13 +14,22 @@ get_artist_level_strata_split <- function(artist_strata, mb, test_size, seed) {
 }
 
 extract_split_tracks <- function(mb, train, test) {
-  train_tracks <- mb |>
-    dplyr::filter(track.s.firstartist.id %in% train$track.s.firstartist.id) |>
-    dplyr::pull(track.s.id)
-  test_tracks <- mb |>
-    dplyr::filter(track.s.firstartist.id %in% test$track.s.firstartist.id) |>
-    dplyr::pull(track.s.id)
-  return(list(train_tracks = train_tracks, test_tracks = test_tracks))
+  get_artist_tracks <- function(artists) {
+    unique(mb$id[mb$track.s.firstartist.id %in% artists$track.s.firstartist.id])
+  }
+  list(train_tracks = get_artist_tracks(train), test_tracks = get_artist_tracks(test))
+}
+
+get_category_columns <- function(trackmap) {
+  #' Get the names of the category probability columns of an assignment of `shampoo::assign_genre_categories()`.
+  setdiff(names(trackmap), c("id", "cat", "cat_prob", "assignment_status"))
+}
+
+load_shampoo_in_worker <- function() {
+  #' Load the development version of shampoo in a parallel worker session (forked workers have it already).
+  if (!"shampoo" %in% loadedNamespaces()) {
+    suppressMessages(devtools::load_all(quiet = TRUE))
+  }
 }
 
 get_mode_with_tie_breaker <- function(x, tie_order) {

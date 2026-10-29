@@ -1,73 +1,44 @@
 source("analysis/helpers/shared_helpers.R")
 
-get_assignments_to_compare <- function(
+get_robustness_trajectories <- function(
   mb,
-  random_state = 42,
+  random_state,
   lambda = 0.5,
-  max_k = 10,
-  n_bins = 5
+  max_k = length(unique(mb$tag_name)),
+  n_bins = 5,
+  chunk_size = 25
 ) {
-  #' Get the order and track assignments for two random splits of a long data frame of music tracks with tags, for a random state, lambda parameter, and maximum number of genre categories (k).
-  #' @param mb A long data frame of music tracks with columns for id, firstartist.id, album.s.releaseyear, artist.s.popularity, tag_name, tag_count.
-  #' @param random_state A random seed for reproducibility (default is 42).
-  #' @param lambda The size / generality tradeoff parameter for the SHAMPOO algorithm (default is 0.5).
-  #' @param max_k The maximum number of genre categories to check for reliability (default is 10, always starts at 2).
-  #' @param n_bins The number of bins to use for stratification when splitting the data into folds (default is 5).
-  #' @return A list containing two elements: fold_1 and fold_2, which are lists of order and track assignments for each random split, and max_k, which is the maximum number of genre categories to check for reliability.
-
-  splits <- stratified_split_1_2_holdout(
-    long = mb,
-    seed = random_state,
-    n_bins = 5
-  )
-  assignments_1 <- get_order_and_track_assignments(
-    splits$fold_1,
-    splits$holdout,
-    lambda,
-    max_k
-  )
-  assignments_2 <- get_order_and_track_assignments(
-    splits$fold_2,
-    splits$holdout,
-    lambda,
-    max_k
-  )
-  list(
-    fold_1 = assignments_1,
-    fold_2 = assignments_2,
-    max_k = max_k,
-    random_state = random_state,
-    n_bins = n_bins,
-    lambda = lambda
-  )
-}
-
-get_robustness_trajectories <- function(assignments) {
-  #' Get the robustness trajectories for a random split, including the iteration number, random state, number of categories (k), processing order precision, processing order tau for intersecting categories, track assignment accuracy, and track assignment probability overlap (zero-padded for genres that appear in only one set at k).
-  #' @param assignments A list containing two elements: fold_1 and fold_2, which contain order and track assignments for each random split, and metadata: max_k, which is the maximum number of genre categories to check for reliability; random_state, which is the random seed used for reproducibility; n_bins, which is the number of bins used for stratification when splitting the data into folds; and lambda, which is the size / generality tradeoff parameter for the SHAMPOO algorithm.
-  #' @return A data frame containing the robustness trajectories for each random split, including the iteration number, random state, number of categories (k), processing order precision, processing order tau for intersecting categories, track assignment accuracy, and track assignment probability overlap (zero-padded for genres that appear in only one set at k).
-  assignments_1 <- assignments$fold_1
-  assignments_2 <- assignments$fold_2
-  max_k <- assignments$max_k
-  kendall_tau_k <- get_kendall_tau_precision_ks(
-    assignments_1$order,
-    assignments_2$order,
-    max_k
-  )
-  track_acc_overlap <- get_track_acc_and_overlap(
-    assignments_1$assignments,
-    assignments_2$assignments,
-    max_k
+  #' Compare the SHAMPOO models of two artist-disjoint training folds of one random split on a shared holdout set.
+  #' @param mb A long data frame of tracks with columns id, track.s.firstartist.id, album.s.releaseyear, artist.s.popularity, tag_name, tag_count.
+  #' @param random_state The random seed of the split.
+  #' @param lambda The size / generality tradeoff parameter of SHAMPOO.
+  #' @param max_k The maximum number of genre categories to compare.
+  #' @param n_bins The number of quantile bins of popularity and release year used for stratification.
+  #' @param chunk_size The number of granularities assigned at once (limits memory, does not change results).
+  #' @return A data frame with one row per k containing the processing order precision and Kendall's tau of the intersection, the hard assignment accuracy and the soft probability overlap on the holdout tracks recognized by both models, and the number of these tracks.
+  splits <- stratified_split_1_2_holdout(mb, random_state, n_bins)
+  models <- lapply(splits[c("fold_1", "fold_2")], function(fold) {
+    shampoo::aggregate_genre_categories(
+      shampoo::create_genre_dag(fold),
+      lambda
+    )
+  })
+  ks <- seq_len(min(max_k, lengths(lapply(models, `[[`, "tags"))))
+  chunks <- split(ks, ceiling(ks / chunk_size))
+  track_agreement <- do.call(
+    rbind,
+    lapply(chunks, get_track_agreement, models, splits$holdout)
   )
   data.frame(
-    random_state = assignments$random_state,
-    n_bins = assignments$n_bins,
-    lambda = assignments$lambda,
-    k = kendall_tau_k$k,
-    order_precision_top_k = kendall_tau_k$precision,
-    order_tau_intersect_top_k = kendall_tau_k$tau_intersect,
-    track_acc = track_acc_overlap$acc,
-    track_prob_overlap = track_acc_overlap$overlap
+    random_state = random_state,
+    n_bins = n_bins,
+    lambda = lambda,
+    get_order_agreement(
+      models$fold_1$relevance_order,
+      models$fold_2$relevance_order,
+      ks
+    ),
+    track_agreement
   )
 }
 
@@ -81,7 +52,7 @@ stratified_split_1_2_holdout <- function(long, seed, n_bins = 5) {
   #' @return A list containing three elements: fold_1, fold_2, and holdout, which are data frames of tracks with tags for each split.
   initial_split_ids <- split_artist_level_popularity_release_year(
     long,
-    test_size = 0.66,
+    train_size = 0.66,
     seed = seed,
     n_bins = n_bins
   )
@@ -91,7 +62,7 @@ stratified_split_1_2_holdout <- function(long, seed, n_bins = 5) {
     filter(id %in% initial_split_ids$train_tracks)
   fold_split_ids <- split_artist_level_popularity_release_year(
     train,
-    test_size = 0.5,
+    train_size = 0.5,
     seed = seed,
     n_bins = n_bins
   )
@@ -104,173 +75,124 @@ stratified_split_1_2_holdout <- function(long, seed, n_bins = 5) {
 
 split_artist_level_popularity_release_year <- function(
   mb,
-  test_size = 0.8,
+  train_size = 0.8,
   n_bins = 5,
   seed = 42
 ) {
   #' Split a long data frame of music tracks into train and test sets at the artist level, stratified by popularity and release year.
   #' @param mb A long data frame of music tracks with columns for artist ID, popularity, and release year.
-  #' @param test_size The proportion of the data to include in the test set (default is 0.8).
+  #' @param train_size The proportion of artists in the training set (default is 0.8).
   #' @param seed A random seed for reproducibility (default is 42).
   #' @return A list containing two elements: train_tracks and test_tracks, which are vectors of track IDs for the training and testing sets, respectively.
   artist_strata <- get_artist_strata(mb, n_bins)
-  split <- get_artist_level_strata_split(artist_strata, mb, test_size, seed)
-  split_tracks <- extract_split_tracks(mb, split$train, split$test)
-  split_tracks
+  split <- get_artist_level_strata_split(artist_strata, mb, train_size, seed)
+  extract_split_tracks(mb, split$train, split$test)
 }
 
 
 get_artist_strata <- function(mb, n_bins) {
-  bin_breaks <- seq(0, 1, length.out = n_bins + 1)
-  artist_strata <- mb |>
+  #' Get the stratum of each artist from the quantile bins of artist popularity and median release year (computed across artists). Artists with missing values are merged into the lowest bin.
+  get_quantile_bin <- function(values) {
+    bins <- cut(
+      values,
+      breaks = quantile(
+        values,
+        probs = seq(0, 1, length.out = n_bins + 1),
+        na.rm = TRUE
+      ),
+      labels = FALSE,
+      include.lowest = TRUE
+    )
+    ifelse(is.na(bins), 1, bins) # merge missing values into the lowest bin
+  }
+  mb |>
     dplyr::group_by(track.s.firstartist.id) |>
     dplyr::summarize(
       median_release_year = median(album.s.releaseyear, na.rm = TRUE),
-      artist_popularity = median(artist.s.popularity, na.rm = TRUE) # should be same for all tracks of an artist
+      artist_popularity = median(artist.s.popularity, na.rm = TRUE) # same for all tracks of an artist
     ) |>
     dplyr::mutate(
-      popularity_bin = cut(
-        artist_popularity,
-        breaks = c(
-          quantile(
-            artist_popularity,
-            probs = bin_breaks,
-            na.rm = TRUE,
-            right = TRUE, # include the right endpoint in the interval
-            include.lowest = TRUE
-          )
-        ),
-        labels = FALSE
-      ),
-      popularity_bin = ifelse(
-        is.na(popularity_bin),
-        1, # Assign a separate bin for missing popularity values
-        popularity_bin
-      ),
-      release_year_bin = cut(
-        median_release_year,
-        quantile(
-          median_release_year,
-          probs = bin_breaks,
-          na.rm = TRUE
-        ),
-        labels = FALSE,
-        right = TRUE,
-        include.lowest = TRUE
-      ),
-      release_year_bin = ifelse(
-        is.na(release_year_bin),
-        1, # Assign a separate bin for missing release years
-        release_year_bin
-      ),
+      popularity_bin = get_quantile_bin(artist_popularity),
+      release_year_bin = get_quantile_bin(median_release_year),
       strata = paste(popularity_bin, release_year_bin, sep = "_")
     )
-  return(artist_strata)
 }
 
-get_order_and_track_assignments <- function(
-  fold,
-  holdout,
-  lambda = 0.5,
-  max_k = 100
-) {
-  G <- length(unique(fold$tag_name))
-  max_genres <- min(max_k, G)
-  dag <- shampoo::create_genre_dag(fold)
-  cat_states <- shampoo::aggregate_genre_categories(dag, lambda)
-  assignments <- shampoo::assign_genre_categories(
-    holdout,
-    cat_states,
-    k = seq(1, max_genres),
-    method = "both"
-  )
-  if (!is.list(assignments)) {
-    assignments <- list(assignments)
-  }
-  list(assignments = assignments, order = cat_states$relevance_order)
-}
-
-
-get_kendall_tau_precision_ks <- function(order1, order2, max_k = 100) {
-  ks <- 1:min(length(order1), length(order2), max_k)
+get_order_agreement <- function(order_1, order_2, ks) {
+  #' Get the precision of the top-k categories of two relevance orders and Kendall's tau of the ranks of their intersection.
   data.frame(
     k = ks,
-    precision = sapply(ks, function(k) {
-      top_k_1 <- order1[1:k]
-      top_k_2 <- order2[1:k]
-      intersect_length <- length(intersect(top_k_1, top_k_2))
-      precision <- intersect_length / k
-      return(precision)
+    order_precision_top_k = sapply(ks, function(k) {
+      length(intersect(order_1[1:k], order_2[1:k])) / k
     }),
-    tau_intersect = sapply(ks, function(k) {
-      top_k_1 <- order1[1:k]
-      top_k_2 <- order2[1:k]
-      intersect_length <- length(intersect(top_k_1, top_k_2))
-      if (intersect_length < 2) {
+    order_tau_intersect_top_k = sapply(ks, function(k) {
+      shared <- intersect(order_1[1:k], order_2[1:k])
+      if (length(shared) < 2) {
         return(NA) # Not enough items to compute Kendall's tau
       }
-      intersect_names <- intersect(top_k_1, top_k_2)
-      top_k1_ranks <- match(top_k_1, order1)
-      names(top_k1_ranks) <- top_k_1
-      top_k1_inter <- top_k1_ranks[intersect_names]
-      top_k2_ranks <- match(top_k_2, order2)
-      names(top_k2_ranks) <- top_k_2
-      top_k2_inter <- top_k2_ranks[intersect_names]
-      tau <- cor(
-        top_k1_inter,
-        top_k2_inter,
-        method = "kendall"
-      )
-      return(tau)
+      cor(match(shared, order_1), match(shared, order_2), method = "kendall")
     })
   )
 }
 
-get_track_acc_and_overlap <- function(
-  assignments_1,
-  assignments_2,
-  max_k = 100
-) {
-  ks <- seq(1, min(length(assignments_1), length(assignments_2), max_k))
-  res <- data.frame(
-    k = integer(length = length(ks)),
-    acc = numeric(length = length(ks)),
-    overlap = numeric(length = length(ks))
+get_track_agreement <- function(ks, models, holdout) {
+  #' Get hard assignment accuracy and soft probability overlap of two SHAMPOO models on the holdout tracks recognized by both models.
+  assignments <- lapply(models, assign_genre_categories_by_k, holdout, ks)
+  do.call(
+    rbind,
+    lapply(ks, function(k) {
+      trackmap_1 <- assignments$fold_1[[as.character(k)]]
+      trackmap_2 <- assignments$fold_2[[as.character(k)]]
+      recognized <- trackmap_1$assignment_status != "no_recognized_tags" &
+        trackmap_2$assignment_status != "no_recognized_tags"
+      data.frame(
+        track_acc = mean(
+          trackmap_1$cat[recognized] == trackmap_2$cat[recognized]
+        ),
+        track_prob_overlap = get_overlap(
+          trackmap_1[recognized, ],
+          trackmap_2[recognized, ]
+        ),
+        n_holdout_tracks = sum(recognized)
+      )
+    })
   )
+}
 
-  for (k in ks) {
-    trackmap_1 <- assignments_1[[k]]
-    trackmap_2 <- assignments_2[[k]]
-    acc <- mean(trackmap_1$cat == trackmap_2$cat)
-    overlap <- get_overlap(trackmap_1, trackmap_2)
-    res[k, ] <- data.frame(k = k, acc = acc, overlap = overlap)
+assign_genre_categories_by_k <- function(categories, holdout, ks) {
+  #' Assign holdout tracks for all ks, named by the requested k (assignments below the number of terminal nodes are those of the clipped k).
+  clipped_ks <- pmax(ks, length(categories$terminal_nodes))
+  assignments <- suppressWarnings(
+    shampoo::assign_genre_categories(holdout, categories, clipped_ks)
+  )
+  if (is.data.frame(assignments)) {
+    assignments <- list(assignments)
+    names(assignments) <- as.character(unique(clipped_ks))
   }
-  return(res)
+  stats::setNames(assignments[as.character(clipped_ks)], ks)
 }
 
 get_overlap <- function(trackmap_1, trackmap_2) {
-  cat_probs_1 <- dplyr::select(trackmap_1, -cat, -cat_prob) |> as.matrix()
-  cat_probs_2 <- dplyr::select(trackmap_2, -cat, -cat_prob) |> as.matrix()
-  diff1 <- setdiff(colnames(cat_probs_2), colnames(cat_probs_1))
-  diff2 <- setdiff(colnames(cat_probs_1), colnames(cat_probs_2))
-  cat_probs_1pad <- cbind(
-    cat_probs_1,
-    matrix(0, nrow = nrow(cat_probs_1), ncol = length(diff1))
+  #' Get the mean shared probability mass of two soft assignments (zero-padded for categories in only one of them).
+  categories <- union(
+    get_category_columns(trackmap_1),
+    get_category_columns(trackmap_2)
   )
-  colnames(cat_probs_1pad) <- c(colnames(cat_probs_1), diff1)
-  cat_probs_2pad <- cbind(
-    cat_probs_2,
-    matrix(0, nrow = nrow(cat_probs_2), ncol = length(diff2))
-  )
-  colnames(cat_probs_2pad) <- c(colnames(cat_probs_2), diff2)
-  cat_probs_1pad <- cat_probs_1pad[, sort(colnames(cat_probs_1pad))]
-  cat_probs_2pad <- cat_probs_2pad[, sort(colnames(cat_probs_2pad))]
-  minoverlap <- pmin(cat_probs_1pad, cat_probs_2pad)
-  if (all(minoverlap == 1)) {
-    return(1) # both matrices identical (case just one equal category)
+  get_padded_probabilities <- function(trackmap) {
+    probabilities <- matrix(
+      0,
+      nrow(trackmap),
+      length(categories),
+      dimnames = list(NULL, categories)
+    )
+    present <- get_category_columns(trackmap)
+    probabilities[, present] <- as.matrix(trackmap[present])
+    probabilities
   }
-  overlap <- mean(rowSums(minoverlap))
-  overlap
+  mean(rowSums(pmin(
+    get_padded_probabilities(trackmap_1),
+    get_padded_probabilities(trackmap_2)
+  )))
 }
 
 get_robustness_statistics <- function(robustness) {
