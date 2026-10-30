@@ -15,8 +15,7 @@ RUN_TAG <- get_setting("RUN_TAG", "rev1") # separates tuning runs and models
 
 N_WORKERS <- get_setting(
   "N_WORKERS",
-  # max(1L, parallel::detectCores(logical = FALSE) - 1L)
-  max(1L, 10L)
+  max(1L, parallel::detectCores(logical = FALSE) - 1L)
 )
 N_TRIALS <- get_setting("N_TRIALS", 100L) # LightGBM trials and SVM grid size
 N_REPEATS <- get_setting("N_REPEATS", 20L) # RQ3 split and PFI repetitions

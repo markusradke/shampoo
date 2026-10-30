@@ -36,7 +36,7 @@ The `R` folder contains all functions from the R package. The folders `man` and 
 - `.Rbuildignore`
 
 ### Exemplary Analysis of POPTRAG Corpus
-Please find the analysis pipeline for reproduction in the `analysis` folder of the repository, organized by research question (RQ). Each script is standalone (there is no orchestrating script), reads the outputs of the previous steps, and can be run on a different machine:
+Please find the analysis pipeline for reproduction in the `analysis` folder of the repository, organized by research question (RQ). RQ5 Scripts are placed in a subfolder called `analysis/RQ5`. Each script is standalone (there is no orchestrating script), reads the outputs of the previous steps, and can be run on a different machine:
 
 | Script | Content |
 |---|---|
@@ -200,7 +200,7 @@ The R scripts find the Python interpreter of `.venv` automatically on Windows an
 Finally, please copy the necessary data from the DepositOnce repository to the repective folders (see [Data Availability](#data-availability) for details).
 
 ## How to Run the Replication
-Run all scripts from the root of the repository, e.g. `Rscript analysis/RQ3_robustness_varying_prevalences.R` or `python analysis/RQ5b_lyrics_3_stm.py`, in the order of the table in [Exemplary Analysis of POPTRAG Corpus](#exemplary-analysis-of-poptrag-corpus). `RQ5d`, `RQ5e`, and `RQ5f` are independent of each other; `RQ5g` needs all three.
+Run all scripts from the root of the repository, e.g. `Rscript analysis/RQ3_robustness_varying_prevalences.R` or `python analysis/RQ5/RQ5b_lyrics_3_stm.py`, in the order of the table in [Exemplary Analysis of POPTRAG Corpus](#exemplary-analysis-of-poptrag-corpus). `RQ5d`, `RQ5e`, and `RQ5f` are independent of each other; `RQ5g` needs all three. RQ5 Scripts are placed in a subfolder called `analysis/RQ5`.
 
 Shared settings live in `analysis/config.R`. Some of them can be overridden per machine with environment variables, without changing the code:
 
