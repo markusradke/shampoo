@@ -1,7 +1,18 @@
 # Shared settings for all analysis scripts. Run scripts from the repo root.
 # Settings read with `get_setting()` can be overridden per machine with an
 # environment variable of the same name prefixed by "SHAMPOO_", e.g.
-# `SHAMPOO_N_WORKERS=30 Rscript analysis/RQ5e_ML_linear_svm.R`.
+# `SHAMPOO_N_WORKERS=30 Rscript analysis/RQ5/RQ5d_ML_train_and_evaluate.R ML1`.
+#
+# Optional email notifications of the ML runs (RQ5d) are configured with these
+# environment variables, best set in `~/.Renviron` of each machine (never in
+# the repo). Without them, the notifications are only written to the log.
+# NOTIFICATION_SMTP_URL: SMTP server of your mail hoster, found on its help
+#   page "set up an email client" (IMAP/SMTP settings) or in the mailbox
+#   settings of its customer panel. Use "smtps://<host>:465" for SSL/TLS or
+#   "smtp://<host>:587" for STARTTLS.
+# NOTIFICATION_SMTP_USER: login of the mailbox, usually the full address.
+# NOTIFICATION_SMTP_PASSWORD: password of the mailbox (or an app password).
+# NOTIFICATION_MAIL_TO: recipient of the notifications.
 
 get_setting <- function(name, default) {
   value <- Sys.getenv(paste0("SHAMPOO_", name), unset = NA)
@@ -11,6 +22,7 @@ get_setting <- function(name, default) {
 RANDOM_STATE <- 42
 LAMBDA <- 0.5
 CHOSEN_KS <- c(5, 17, 31) # chosen from the RQ1 Gini trajectory
+FEATURE_SETS <- c("all", "no_spotify_genres") # ablation without "sp_*" features
 RUN_TAG <- get_setting("RUN_TAG", "rev1") # separates tuning runs and models
 
 N_WORKERS <- get_setting(
@@ -53,14 +65,18 @@ use_project_python <- function() {
   Sys.setenv(RETICULATE_PYTHON = python_path)
 }
 
-get_model_path <- function(model_name, k, extension = "rds") {
-  sprintf(
-    "models/classification/%s_%s_k%d.%s",
-    model_name,
+get_model_path <- function(model_name, k, feature_set, extension = "rds") {
+  #' Get the path of an ML result. All results of a run are stored in one folder, so the results of several machines can be merged by copying.
+  path <- sprintf(
+    "models/classification/%s/%s_%s_k%d.%s",
     RUN_TAG,
+    model_name,
+    feature_set,
     k,
     extension
   )
+  dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
+  path
 }
 
 save_figure <- function(filename, plot = ggplot2::last_plot(), ...) {

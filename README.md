@@ -47,10 +47,8 @@ Please find the analysis pipeline for reproduction in the `analysis` folder of t
 | `RQ5a_split_labels_spotify_genres.R` | Study 3: train/holdout split, labels, Spotify distribution genres |
 | `RQ5b_lyrics_1_prepare_corpora.R` → `RQ5b_lyrics_2_fighting_vocabularies.py` → `RQ5b_lyrics_3_stm.py` → `RQ5b_lyrics_4_expression_features.R` | Study 3: lyrics expression type features |
 | `RQ5c_prepare_ML_data.R` | Study 3: feature joining, dummy coding, CV folds |
-| `RQ5d_ML_lightgbm.R` | Study 3: LightGBM tuning, training, evaluation, permutation feature importance |
-| `RQ5e_ML_linear_svm.R` | Study 3: linear SVM grid search, training, evaluation |
-| `RQ5f_ML_tabicl.R` | Study 3: TabICLv2 (requires a CUDA GPU) |
-| `RQ5g_ML_summary.R` | Study 3: performance table of all models |
+| `RQ5d_ML_train_and_evaluate.R` | Study 3: tuning, training, and holdout evaluation of LightGBM (incl. permutation feature importance), linear SVM, and TabICLv2 for all feature sets, see [Running the ML Analysis](#running-the-ml-analysis) |
+| `RQ5e_ML_summary.R` | Study 3: performance tables, ablation table, confusion matrices, and permutation feature importance figures |
 
 
 Further files:
@@ -195,12 +193,12 @@ After that please install all the necessary packages contained in `requirements.
 ```
 pip install -r requirements.txt
 ```
-The R scripts find the Python interpreter of `.venv` automatically on Windows and Unix. TabICLv2 (`RQ5f_ML_tabicl.R`) additionally requires a CUDA-enabled PyTorch installation and a GPU.
+The R scripts find the Python interpreter of `.venv` automatically on Windows and Unix. TabICLv2 (in `RQ5d_ML_train_and_evaluate.R`) additionally requires a CUDA-enabled PyTorch installation and a GPU.
 
 Finally, please copy the necessary data from the DepositOnce repository to the repective folders (see [Data Availability](#data-availability) for details).
 
 ## How to Run the Replication
-Run all scripts from the root of the repository, e.g. `Rscript analysis/RQ3_robustness_varying_prevalences.R` or `python analysis/RQ5/RQ5b_lyrics_3_stm.py`, in the order of the table in [Exemplary Analysis of POPTRAG Corpus](#exemplary-analysis-of-poptrag-corpus). `RQ5d`, `RQ5e`, and `RQ5f` are independent of each other; `RQ5g` needs all three. RQ5 Scripts are placed in a subfolder called `analysis/RQ5`.
+Run all scripts from the root of the repository, e.g. `Rscript analysis/RQ3_robustness_varying_prevalences.R` or `python analysis/RQ5/RQ5b_lyrics_3_stm.py`, in the order of the table in [Exemplary Analysis of POPTRAG Corpus](#exemplary-analysis-of-poptrag-corpus). RQ5 Scripts are placed in a subfolder called `analysis/RQ5`.
 
 Shared settings live in `analysis/config.R`. Some of them can be overridden per machine with environment variables, without changing the code:
 
@@ -212,9 +210,16 @@ Shared settings live in `analysis/config.R`. Some of them can be overridden per 
 | `SHAMPOO_N_REPEATS` | `20` | repetitions of the RQ3 splits and the permutation feature importance |
 | `SHAMPOO_DEBUG` | `FALSE` | subsample the machine learning data for quick test runs |
 
-For example, on a Unix server: `SHAMPOO_N_WORKERS=31 Rscript analysis/RQ5e_ML_linear_svm.R`.
+For example, on a Unix server: `SHAMPOO_N_WORKERS=31 Rscript analysis/RQ3_robustness_varying_prevalences.R`.
 
-The computationally demanding scripts are RQ3, the lyrics features (`RQ5b_lyrics_2` and `_3`), `RQ5d` (LightGBM), and `RQ5e` (linear SVM), which profit from many CPU cores, and `RQ5f` (TabICLv2), which requires a GPU. All other scripts run within minutes on a laptop.
+The computationally demanding scripts are RQ3, the lyrics features (`RQ5b_lyrics_2` and `_3`), and `RQ5d` (LightGBM and linear SVM profit from many CPU cores, TabICLv2 requires a GPU). All other scripts run within minutes on a laptop.
+
+### Running the ML Analysis
+`RQ5d_ML_train_and_evaluate.R` runs the jobs (model × feature set × k) of one machine. The job table at the top of the script assigns them to machines; put all jobs on one machine name to use a single machine.
+1. Optional email notifications (start, progress, finished/failed jobs): set `NOTIFICATION_SMTP_URL`, `NOTIFICATION_SMTP_USER`, `NOTIFICATION_SMTP_PASSWORD`, and `NOTIFICATION_MAIL_TO` in `~/.Renviron` (see `analysis/config.R`). Test with `Rscript -e 'source("analysis/config.R"); source("analysis/helpers/RQ5/notify.R"); send_notification("test", "hello")'`.
+2. Smoke test (take a few minutes): `SHAMPOO_DEBUG=TRUE SHAMPOO_N_TRIALS=2 SHAMPOO_N_REPEATS=2 SHAMPOO_RUN_TAG=smoke Rscript analysis/RQ5/RQ5d_ML_train_and_evaluate.R <machine>`, then `rm -r models/classification/smoke`.
+3. Run: `mkdir -p logs && nohup Rscript analysis/RQ5/RQ5d_ML_train_and_evaluate.R <machine> > logs/RQ5d_<machine>.log 2>&1 &`. Finished jobs are skipped and interrupted tunings resume when restarted.
+4. Copy `models/classification/<RUN_TAG>/` of all machines into one repository and run `Rscript analysis/RQ5/RQ5e_ML_summary.R`.
 
 Pre-processed data will be created inside a `data` folder. Models and information on the modeling process will be created inside a `models` folder. Figures will be created inside the `reports/figures` folder, named after their number in the paper (figures only contained in the supplement are prefixed with `supp_`).
 

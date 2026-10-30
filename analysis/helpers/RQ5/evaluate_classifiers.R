@@ -9,7 +9,11 @@ evaluate_lightgbm_model <- function(
   y_pred_prob <- predict(
     model,
     as.matrix(select(val_data, -track.s.id)),
-    params = if (is.null(num_threads)) list() else list(num_threads = num_threads)
+    params = if (is.null(num_threads)) {
+      list()
+    } else {
+      list(num_threads = num_threads)
+    }
   )
   colnames(y_pred_prob) <- hot_levels
   y_pred_hot <- choose_first_max_class(y_pred_prob, hot_levels)
@@ -103,18 +107,19 @@ get_f1_macro <- function(y_pred, y_true) {
   mean(f1_scores)
 }
 
-append_metrics_to_file <- function(metrics, model, k, trial_number) {
+append_metrics_to_file <- function(
+  metrics,
+  model,
+  k,
+  feature_set,
+  trial_number
+) {
   metrics <- cbind(
     trial_number = trial_number,
     model = model,
     metrics
   )
-  filename <- sprintf(
-    "models/classification/tuning/%s_%s_k%d_tuning_metrics.csv",
-    model,
-    RUN_TAG,
-    k
-  )
+  filename <- get_tuning_metrics_path(model, k, feature_set)
   # look for existing file, if not found create new file with header
   file_exists <- file.exists(filename)
   if (!file_exists) {
@@ -131,6 +136,26 @@ append_metrics_to_file <- function(metrics, model, k, trial_number) {
   close(fileConn)
 }
 
+
+get_tuning_metrics_path <- function(model_name, k, feature_set) {
+  get_model_path(
+    file.path("tuning", paste0(model_name, "_tuning_metrics")),
+    k,
+    feature_set,
+    "csv"
+  )
+}
+
+get_best_cv_metrics <- function(model_name, k, feature_set) {
+  #' Get the CV metrics of the best trial or cost of a tuned model, or NULL if it was not tuned.
+  tuning_path <- get_tuning_metrics_path(model_name, k, feature_set)
+  if (!file.exists(tuning_path)) {
+    return(NULL)
+  }
+  readr::read_csv(tuning_path, show_col_types = FALSE) |>
+    slice_max(F1_macro_mean, n = 1, with_ties = FALSE) |>
+    select(F1_macro_mean, F1_SE, kappa_mean, kappa_SE)
+}
 
 compute_final_evaluation <- function(
   y_pred_hot,
