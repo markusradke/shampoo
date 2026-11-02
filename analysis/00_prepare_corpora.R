@@ -5,8 +5,7 @@ source("analysis/config.R")
 source("analysis/helpers/helpers_prepare_corpora.R")
 
 MIN_VOTES <- 2
-# MIN_ARTIST_PREV_MODEL <- 0.001
-MIN_ARTIST_PREV_MODEL <- 0.00
+MIN_ARTIST_PREV_MODEL <- 0.001
 MIN_ARTISTS_PER_EXTERNAL_TAG <- 100
 
 MB_WHITELIST_PATH <- "data-raw/musicbrainz_genre_whitelist_20250616.rds"

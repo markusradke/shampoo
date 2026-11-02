@@ -18,25 +18,27 @@ source("analysis/helpers/RQ5/run_ml_jobs.R")
 # JOBS PER MACHINE ----
 # balanced for ML1 (32-core CPU) and ML2 (24-core CPU, GPU for TabICL)
 ML_JOBS <- bind_rows(
-  tibble(
-    machine = "ML1",
-    model = "lgbm",
-    feature_set = c("all", "no_spotify_genres", "all"),
-    k = c(17, 17, 31)
+  tribble(
+    ~machine , ~model       , ~feature_set        , ~k ,
+    "ML1"    , "lgbm"       , "all"               , 17 ,
+    "ML1"    , "lgbm"       , "no_spotify_genres" , 17 ,
+    "ML1"    , "lgbm"       , "all"               , 31 ,
+    "ML1"    , "lgbm"       , "all"               ,  5 ,
+    "ML1"    , "lgbm"       , "no_spotify_genres" ,  5 ,
+    "ML1"    , "linear_svm" , "all"               ,  5 ,
+    "ML1"    , "linear_svm" , "no_spotify_genres" ,  5 ,
+    "ML1"    , "linear_svm" , "no_spotify_genres" , 17 ,
+    "ML1"    , "linear_svm" , "all"               , 31 ,
+    "ML2"    , "linear_svm" , "all"               , 17 ,
+    "ML2"    , "linear_svm" , "no_spotify_genres" , 31 ,
+    "ML2"    , "lgbm"       , "no_spotify_genres" , 31
   ),
   expand.grid(
     machine = "ML2",
-    k = CHOSEN_KS,
+    model = "tabicl",
     feature_set = FEATURE_SETS,
-    model = c("tabicl", "linear_svm"),
+    k = CHOSEN_KS,
     stringsAsFactors = FALSE
-  ) |>
-    arrange(desc(model)),
-  tibble(
-    machine = "ML2",
-    model = "lgbm",
-    feature_set = c("all", "no_spotify_genres", "no_spotify_genres"),
-    k = c(5, 5, 31)
   )
 )
 RUN_JOB <- list(

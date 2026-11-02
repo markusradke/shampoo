@@ -55,6 +55,7 @@ Further files:
 - `analysis/config.R`: shared settings of all scripts (random seed, lambda for genre aggregation, chosen granularities, number of parallel workers, etc.), see [How to Run the Replication](#how-to-run-the-replication)
 - `analysis/helpers/*`: helper functions related to the RQs
   - `analysis/helpers/RQ5/spotify_shampoo_genres.R` contains the functions to model additional Spotify SHAMPOO genres
+  - `analysis/helpers/RQ5/train_*.R` contain the tuning and training per model type (`train_shared.R` for all of them); `run_ml_jobs.R` combines them into the jobs of `RQ5d`
   - `analysis/helpers/RQ5/lyrics_analysis/helpers` contains the functions to perform the MoreThanWords algorithm (Radke & Lepa, 2026), for further details see [this repository](https://github.com/markusradke/MoreThanWords)
 >[!NOTE]
 > The scripts reference additional folders. These will be created automatically by `00_prepare_corpora.R`.

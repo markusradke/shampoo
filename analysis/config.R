@@ -25,10 +25,20 @@ CHOSEN_KS <- c(5, 17, 31) # chosen from the RQ1 Gini trajectory
 FEATURE_SETS <- c("all", "no_spotify_genres") # ablation without "sp_*" features
 RUN_TAG <- get_setting("RUN_TAG", "rev1") # separates tuning runs and models
 
-N_WORKERS <- get_setting(
-  "N_WORKERS",
-  max(1L, parallel::detectCores(logical = FALSE) - 1L)
-)
+count_physical_cores <- function() {
+  #' Count the physical CPU cores. On Linux, `parallel::detectCores(logical = FALSE)` ignores `logical` and counts hyperthreads, so the unique (socket, core) pairs of /proc/cpuinfo are counted there.
+  if (!file.exists("/proc/cpuinfo")) {
+    return(parallel::detectCores(logical = FALSE))
+  }
+  cpuinfo <- readLines("/proc/cpuinfo")
+  cores <- unique(paste(
+    grep("^physical id", cpuinfo, value = TRUE),
+    grep("^core id", cpuinfo, value = TRUE)
+  ))
+  if (length(cores) > 0) length(cores) else parallel::detectCores()
+}
+
+N_WORKERS <- get_setting("N_WORKERS", max(1L, count_physical_cores() - 1L))
 N_TRIALS <- get_setting("N_TRIALS", 100L) # LightGBM trials and SVM grid size
 N_REPEATS <- get_setting("N_REPEATS", 20L) # RQ3 split and PFI repetitions
 DEBUGGING <- get_setting("DEBUG", FALSE) # subsample ML data for smoke runs

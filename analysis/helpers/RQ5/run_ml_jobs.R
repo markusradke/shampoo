@@ -1,4 +1,6 @@
-source("analysis/helpers/RQ5/tuning_and_training.R")
+source("analysis/helpers/RQ5/train_lightgbm.R")
+source("analysis/helpers/RQ5/train_linear_svm.R")
+source("analysis/helpers/RQ5/train_tabicl.R")
 source("analysis/helpers/RQ5/calculate_pfi.R")
 
 # Each job tunes (if applicable), trains, and evaluates one model for one k and
